@@ -1,0 +1,33 @@
+version: "3.7"
+services:
+  leadip:
+    build:
+      args:
+        user: leadip
+        uid: 1000
+      context: ./
+      dockerfile: Dockerfile
+    image: leadip
+    container_name: leadip-backend
+    restart: unless-stopped
+    working_dir: /var/www/
+    volumes:
+      - ./:/var/www
+    networks:
+      - leadip
+
+  nginx:
+    image: nginx:alpine
+    container_name: leadip-nginx
+    restart: unless-stopped
+    ports:
+      - 8033:80
+    volumes:
+      - ./:/var/www
+      - ./docker-compose/nginx:/etc/nginx/conf.d/
+    networks:
+      - leadip
+
+networks:
+  leadip:
+    driver: bridge
