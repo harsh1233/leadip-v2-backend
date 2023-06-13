@@ -983,7 +983,7 @@ class CompanyContactController extends Controller
     public function getcompanyimport()
     {
         $filepath = public_path('file_example_companycontact_XLS.csv');
-        return Response::download($filepath);
+        return response()->download($filepath);
     }
 
     /**
@@ -995,7 +995,7 @@ class CompanyContactController extends Controller
     public function downloadfile()
     {
         $filepath = public_path('file_example_XLS.csv');
-        return Response::download($filepath);
+        return response()->download($filepath);
     }
 
     /**

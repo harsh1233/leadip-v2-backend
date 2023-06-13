@@ -77,14 +77,14 @@ class GlobalFileController extends Controller
         //Validation
         $this->validate($request, [
             'uploaded_file'   => 'required',
-            'uploaded_file.*' => 'mimes:png,csv,pdf,doc,docx,txt,xls,xlsx,jpg,jpeg|max:10240',
+            'uploaded_file.*' => 'max:10240',
             'message'         => 'nullable|max:1000',
             'contact_related' => 'nullable|exists:contacts,id',
             'company_related' => 'nullable|exists:contacts,id',
         ], [
             'uploaded_file.*'       => 'Invalid file type. Accepted file types are: .png, .jpeg, .PDF, .CSV, .XLS, .doc, .docx, .txt.',
             'uploaded_file.*.max'   => 'You can not upload greater than 10 MB.',
-            'uploaded_file.*.mimes' => 'Invalid file type. Accepted file types are: .png, .jpeg, .PDF, .CSV, .XLS, .doc, .docx, .txt.',
+            //'uploaded_file.*.mimes' => 'Invalid file type. Accepted file types are: .png, .jpeg, .PDF, .CSV, .XLS, .doc, .docx, .txt.',
         ]);
         /* Check company or contact to same company or another company */
         $query   = CompanyContact::query();

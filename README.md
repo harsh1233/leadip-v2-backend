@@ -64,3 +64,24 @@ If you discover a security vulnerability within Laravel, please send an e-mail t
 ## License
 
 The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+
+# Project setup 
+Clone the Repo:
+1) git clone project repo url
+2) cd leadip-v2-backend
+3) composer install or composer update
+4) cp .env.example .env
+5) Set up .env file
+6) php artisan key:generate
+7) php artisan migrate:fresh --seed
+8) php artisan serve
+http://127.0.0.1:8000/
+9) After run migration manual add country and city table in database
+10) Goto google developer console and generate client id and client secret and setup in .env file https://console.cloud.google.com/cloud-resource-manager
+11) Goto facbook developer console and generate client id and client secret and setup in .env file https://developers.facebook.com/
+12) Goto linkdin developer console and generate client id and client secret and setup in .env file https://www.linkedin.com/developers/apps/new?src=or-search&veh=www.google.com
+13) Google sync required add people api and contacts api scope permission in google console and generate google api key
+14) Outlook sync create account in https://portal.azure.com/ and register app in this portal and generate client secret and id and setup in env file
+15) Setup APOLLO_API_KEY in env file for enrichment
+16) Setup Mail and Aws credentials in env file
+17) Run php artisan optimize:clear command for clear cache memory.

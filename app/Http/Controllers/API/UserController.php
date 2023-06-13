@@ -920,9 +920,10 @@ class UserController extends Controller
     {
         $user = UserDetail::with('preferenceIndustries.industry', 'preferenceCountries.country', 'preferenceAgents')->where('user_id', auth()->user()->id)->first();
 
-        if (!$user) {
-            return error(__('Preference data not found.'), [], 'validation');
-        }
+        //TODO: comment this error response because getting error on onboarding page when user details not found 13-06-2023
+        // if (!$user) {
+        //     return error(__('Preference data not found.'), [], 'validation');
+        // }
 
         return ok(__('User Preference data details'), $user);
     }

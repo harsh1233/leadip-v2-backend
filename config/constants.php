@@ -65,5 +65,5 @@ return [
 
     'APOLLO_API_URL' => env('APOLLO_API_URL','https://api.apollo.io/api/v1/people/bulk_match'),
     'AWS_URL'        => env('AWS_URL','https://leadip-v2-s3-test.s3.ap-south-1.amazonaws.com'),
-    'FILE_EXTENTION' => ['png','jpeg','jpg','PDF','CSV','XLS','XLSX','doc','docx','txt'],
+    'FILE_EXTENTION' => ['png','jpeg','jpg','PDF','CSV','XLS','XLSX','doc','docx','txt','csv','pdf','xls','xls','TXT','DOC','DOCX','PNG','JPG','JPEG'],
 ];
