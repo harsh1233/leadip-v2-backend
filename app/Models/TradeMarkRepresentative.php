@@ -34,11 +34,21 @@ class TradeMarkRepresentative extends Model
         'deleted_at',
     ];
 
+    /**
+     * Trademark Details
+     *
+     * @return void
+     */
     public function trademark()
     {
         return $this->hasOne(TradeMark::class, 'trademark_id', 'id');
     }
 
+    /**
+     * Trademark representative country Details
+     *
+     * @return void
+     */
     public function country()
     {
         return $this->hasOne(WipoCountry::class, 'id', 'country_id')->select('id', 'name', 'code', 'flag');

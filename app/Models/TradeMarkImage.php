@@ -45,6 +45,11 @@ class TradeMarkImage extends Model
         return json_decode($value);
     }
 
+    /**
+     * Trademark Details
+     *
+     * @return void
+     */
     public function trademark()
     {
         return $this->hasOne(TradeMark::class, 'trademark_id', 'id');

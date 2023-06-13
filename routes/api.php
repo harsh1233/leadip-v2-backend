@@ -1,26 +1,27 @@
 <?php
 
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\API\TeamController;
 use App\Http\Controllers\API\{
+    ApolloController,
     AuthController,
-    UserController,
-    RoleController,
-    CountryController,
     CityController,
-    LanguageController,
-    CompanyController,
     CompanyContactController,
-    RegionController,
+    CompanyController,
     ContactListController,
+    CountryController,
     GlobalFileController,
+    LanguageController,
     NotificationController,
     ProtocolController,
+    RegionController,
     ReportController,
-    ApolloController,
-    TradeMarkController
+    RoleController,
+    TeamController,
+    TradeMarkController,
+    UserController,
 };
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
+
 /*  */
 /*
 |--------------------------------------------------------------------------
@@ -73,7 +74,7 @@ Route::controller(UserController::class)->group(function () {
 
 
 
-Route::middleware('auth-sanctum-custome')->group(function () {
+Route::middleware('auth-sanctum-custom')->group(function () {
 
     Route::controller(AuthController::class)->group(function () {
         Route::post('logout', 'logout');
@@ -108,22 +109,22 @@ Route::middleware('auth-sanctum-custome')->group(function () {
         Route::group(['prefix' => 'company'], function () {
             Route::post('about-company-update', 'aboutCompanyUpdate');
             Route::post('add-team', 'addTeam');
-            Route::post('create-password', 'createPassword')->name('create-password')->withoutMiddleware(['auth-sanctum-custome']);
-            Route::post('sync-contact', 'enterLeadIp');
+            Route::post('create-password', 'createPassword')->name('create-password')->withoutMiddleware(['auth-sanctum-custom']);
             Route::post('enter-leadip', 'enterLeadIp');
-            Route::post('update-onboard-status', 'updateOnboardStatus');
-            Route::post('user-profile', 'userProfile');
-            Route::post('user-contacts-and-channels', 'contactsAndChannels');
-            Route::post('user-locations', 'userLocations');
-            Route::post('user-languages', 'userLanguages');
-            Route::post('user-areas-of-expertise', 'userAreasOfExpertise');
-            Route::post('user-interested', 'userInterested');
+            //Route::post('update-onboard-status', 'updateOnboardStatus');
+            //Route::post('user-profile', 'userProfile');
+            //Route::post('user-contacts-and-channels', 'contactsAndChannels');
+            //Route::post('user-locations', 'userLocations');
+            //Route::post('user-languages', 'userLanguages');
+            //Route::post('user-areas-of-expertise', 'userAreasOfExpertise');
+            //Route::post('user-interested', 'userInterested');
             Route::post('add-preference', 'addPreference');
             Route::post('list-industries', 'listIndustry');
             Route::post('user-preference', 'userPreference');
             Route::post('update-preference', 'updatePreference');
-            Route::post('user-certification', 'userCertification');
+            //Route::post('user-certification', 'userCertification');
             Route::get('user-view-profile/{id}', 'userViewProfile');
+            Route::get('profile-picture/{id}', 'userCompanyProfilePicture');
             Route::post('profile-completion-criteria', 'profileCompletionCriteria');
             Route::post('change-sync-contact', 'syncContactStatus');
             Route::post('update-profile', 'update')->middleware('permission:manage_company_settings_info_my_profile,edit');
@@ -153,15 +154,15 @@ Route::middleware('auth-sanctum-custome')->group(function () {
     // Company profile
     Route::controller(CompanyController::class)->group(function () {
         Route::group(['prefix' => 'company'], function () {
-            Route::post('description', 'description');
-            Route::post('contacts-and-channels', 'contactsAndChannels');
-            Route::post('office', 'companyOffice');
-            Route::post('languages', 'companyLanguages');
-            Route::post('expertises', 'companyExpertises');
-            Route::post('services', 'companyServices');
-            Route::post('regions', 'companyRegions');
-            Route::post('certifications', 'companyCertifications');
-            Route::post('meet', 'companyMeet');
+            //Route::post('description', 'description');
+            //Route::post('contacts-and-channels', 'contactsAndChannels');
+            //Route::post('office', 'companyOffice');
+            //Route::post('languages', 'companyLanguages');
+            //Route::post('expertises', 'companyExpertises');
+            //Route::post('services', 'companyServices');
+            //Route::post('regions', 'companyRegions');
+            //Route::post('certifications', 'companyCertifications');
+            //Route::post('meet', 'companyMeet');
             Route::get('view-profile/{id}', 'companyViewProfile');
             Route::post('update', 'update')->middleware(['role:Super Admin|Admin', 'permission:manage_company_settings_info_my_company,edit']);
         });
@@ -173,27 +174,22 @@ Route::middleware('auth-sanctum-custome')->group(function () {
             Route::post('create', 'create')->middleware('permission:manage_contacts|manage_prospects|manage_clients,add');
             Route::post('update', 'update')->middleware('permission:manage_contacts|manage_prospects|manage_clients,edit');
             Route::post('update-priority', 'updatePriority')->middleware('permission:manage_contacts|manage_prospects|manage_clients,edit');
-            Route::post('addToArchive', 'softDelete')->middleware('permission:manage_contacts|manage_prospects|manage_clients,edit');
-            Route::post('listArchive', 'listArchive')->middleware('permission:manage_contacts|manage_prospects|manage_clients,edit');
-            Route::post('listArchiveNew', 'listArchiveNew')->middleware('permission:manage_contacts|manage_prospects|manage_clients,edit');
-            Route::post('restoreArchive', 'restoreArchive')->middleware('permission:manage_contacts|manage_prospects|manage_clients,edit');
+            Route::post('add-archive', 'softDelete')->middleware('permission:manage_contacts|manage_prospects|manage_clients,edit');
+            Route::post('list-archive', 'listArchive')->middleware('permission:manage_contacts|manage_prospects|manage_clients,edit');
+            Route::post('restore-archive', 'restoreArchive')->middleware('permission:manage_contacts|manage_prospects|manage_clients,edit');
             Route::post('delete', 'destroy')->middleware('permission:manage_contacts|manage_prospects|manage_clients,edit');
             Route::post('list', 'list')->middleware('permission:manage_contacts|manage_prospects|manage_clients,view');
-            Route::post('list-new', 'listNew')->middleware('permission:manage_contacts|manage_prospects|manage_clients,view');
             Route::post('assign', 'assign')->middleware('permission:manage_contacts|manage_prospects|manage_clients,assign');
             Route::post('export', 'export')->middleware('permission:manage_contacts|manage_prospects|manage_clients,export');
-            Route::post('import', 'import')->middleware('permission:manage_contacts|manage_prospects|manage_clients,upload');
-            Route::post('importcompany', 'importcompany')->middleware('permission:manage_contacts|manage_prospects|manage_clients,upload');
             Route::get('get', 'downloadfile');
-            Route::get('getcompanyimport', 'getcompanyimport');
+            Route::get('company-import', 'getcompanyimport');
             Route::post('move', 'move')->middleware('permission:manage_contacts|manage_prospects|manage_clients,move');
             Route::get('view', 'view')->middleware('permission:manage_contacts|manage_prospects|manage_clients,view');
             Route::post('share', 'share')->middleware('permission:manage_contacts|manage_prospects|manage_clients,share');
-            Route::post('listemail', 'listemail');
+            //Route::post('list-email', 'listemail');
             Route::post('allmylist', 'allmylist');
-            Route::post('filter', 'filter');
-            Route::post('getpeople', 'getpeople');
-            Route::post('getCompanyContact', 'getCompanyContact');
+            //Route::post('people', 'getpeople');
+            Route::post('company-contact', 'getCompanyContact');
             Route::post('company-team', 'companyTeam')->middleware('permission:manage_teams,view');
         });
     });
@@ -201,41 +197,40 @@ Route::middleware('auth-sanctum-custome')->group(function () {
     /*ContactList Controller for list module */
     Route::controller(ContactListController::class)->group(function () {
         Route::group(['prefix' => 'contact-list'], function () {
-            Route::post('list',             'list')->middleware('permission:manage_lists,view');
-            Route::post('store',            'store')->middleware('permission:manage_lists,add');
-            Route::post('update/{id}',      'update')->middleware('permission:manage_lists,edit');
-            Route::post('delete/{id?}',     'delete')->middleware('permission:manage_lists,delete');
-            Route::post('assign',           'assign')->middleware('permission:manage_lists,assign');
-            Route::post('add-to-list',     'addToList');
-            Route::post('merge',            'merge');
-            Route::post('move-list',       'moveList')->middleware('permission:manage_lists,move');
-            Route::post('list-contact',    'listContact')->middleware('permission:manage_list_detail,view');
+            Route::post('list', 'list')->middleware('permission:manage_lists,view');
+            Route::post('store', 'store')->middleware('permission:manage_lists,add');
+            Route::post('update/{id}', 'update')->middleware('permission:manage_lists,edit');
+            Route::post('delete/{id?}', 'delete')->middleware('permission:manage_lists,delete');
+            Route::post('assign', 'assign')->middleware('permission:manage_lists,assign');
+            Route::post('add-to-list', 'addToList');
+            Route::post('merge', 'merge');
+            //Route::post('move-list', 'moveList')->middleware('permission:manage_lists,move');
+            Route::post('list-contact', 'listContact')->middleware('permission:manage_list_detail,view');
             Route::post('change-type-list', 'changeTypeList');
-            Route::post('get-list',         'getList');
-            Route::post('assign-contact',   'assignContact')->middleware('permission:manage_list_detail,assign');
-            Route::post('edit-contact',     'editContact')->middleware('permission:manage_list_detail,edit');
-            Route::post('move-contact',     'moveContact')->middleware('permission:manage_list_detail,move');;
-            Route::post('remove-contact',   'removeContact')->middleware('permission:manage_list_detail,remove');
-            Route::post('list-to-prospect', 'listToProspect');
-            Route::post('filter', 'filter');
+            Route::post('get-list', 'getList');
+            Route::post('assign-contact', 'assignContact')->middleware('permission:manage_list_detail,assign');
+            //Route::post('edit-contact', 'editContact')->middleware('permission:manage_list_detail,edit');
+            Route::post('move-contact', 'moveContact')->middleware('permission:manage_list_detail,move');
+            Route::post('remove-contact', 'removeContact')->middleware('permission:manage_list_detail,remove');
+            //Route::post('list-to-prospect', 'listToProspect');
         });
     });
 
     /*Globalfile controller for global file upload */
     Route::controller(GlobalFileController::class)->group(function () {
         Route::group(['prefix' => 'global-files'], function () {
-            Route::post('newfolder', 'newfolder');
+            //Route::post('new-folder', 'newfolder');
             Route::post('store', 'store')->middleware('permission:manage_files,upload');
             Route::post('list', 'list')->middleware('permission:manage_files,view');
-            Route::post('listfiles', 'listfiles')->middleware('permission:manage_files,view');
+            Route::post('list-files', 'listfiles')->middleware('permission:manage_files,view');
             Route::post('delete', 'delete')->middleware('permission:manage_files,delete');
-            Route::post('deleteglobalfiles', 'deleteglobalfiles')->middleware('permission:manage_files,delete');
-            Route::post('deletfolderfiles', 'deletfolderfiles');
+            Route::post('delete-global-files', 'deleteglobalfiles')->middleware('permission:manage_files,delete');
+            Route::post('delete-folder-files', 'deletfolderfiles');
         });
         Route::group(['prefix' => 'note'], function () {
             Route::post('store', 'addNote')->middleware('permission:manage_notes,add');
             Route::post('list', 'listNote')->middleware('permission:manage_notes,view');
-            Route::post('view',  'viewNote')->middleware('permission:manage_notes,view');;
+            //Route::post('view', 'viewNote')->middleware('permission:manage_notes,view');
             Route::post('edit', 'editNote')->middleware('permission:manage_notes,edit');
             Route::post('store-type', 'storeNoteType');
             Route::post('list-type', 'listNoteType');
@@ -261,11 +256,8 @@ Route::middleware('auth-sanctum-custome')->group(function () {
     Route::controller(ReportController::class)->group(function () {
         Route::group(['prefix' => 'report-contact'], function () {
             Route::post('count', 'contactCount');
-            Route::post('count-new', 'contactCountNew');
             Route::post('percentage', 'contactPercentage');
-            Route::post('percentage-new', 'contactPercentageNew');
             Route::post('base-count', 'contactBaseCount');
-            Route::post('base-count-new', 'contactBaseCountNew');
             Route::post('country-count', 'contactcountryCount');
             Route::post('import', 'import');
         });
@@ -275,7 +267,6 @@ Route::middleware('auth-sanctum-custome')->group(function () {
     Route::controller(ApolloController::class)->group(function () {
         Route::group(['prefix' => 'contact'], function () {
             Route::post('/enrich', 'enrichContacts');
-            Route::post('/search-country', 'getTradmarksUsingCompany');
         });
     });
 

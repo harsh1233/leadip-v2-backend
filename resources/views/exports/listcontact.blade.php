@@ -13,7 +13,7 @@
         </tr>
     </thead>
     <tbody>
-        @foreach($contacts as $key=>$value)
+        @foreach($contacts as $value)
         <tr>
             @if($listname->sub_type == 'C')
             <td>{{ $value->company_name ?? '-'}}</td>

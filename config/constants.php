@@ -62,4 +62,8 @@ return [
     'people_enrich_city_percentage'       => 10,
     'people_enrich_country_percentage'    => 20,
     'people_enrich_category_percentage'   => 20,
+
+    'APOLLO_API_URL' => env('APOLLO_API_URL','https://api.apollo.io/api/v1/people/bulk_match'),
+    'AWS_URL'        => env('AWS_URL','https://leadip-v2-s3-test.s3.ap-south-1.amazonaws.com'),
+    'FILE_EXTENTION' => ['png','jpeg','jpg','PDF','CSV','XLS','XLSX','doc','docx','txt'],
 ];

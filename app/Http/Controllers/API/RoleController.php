@@ -7,7 +7,7 @@ use Illuminate\Http\Request;
 use App\Models\Role;
 
 class RoleController extends Controller
-{    
+{
     /**
      * get Roles api
      *
@@ -16,8 +16,8 @@ class RoleController extends Controller
      */
     public function list(Request $request)
     {
-        $roles = Role::where('name','!=','Super Admin')->get(['id','name']);
-        return ok(__('Role list successfully!'),$roles);
-
+        // Get All roles name and ids.
+        $roles = Role::where('name', '!=', config('constants.super_admin'))->get(['id','name']);
+        return ok(__('Role list successfully!'), $roles);
     }
 }

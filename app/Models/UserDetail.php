@@ -110,8 +110,12 @@ class UserDetail extends Model
     public function getExtraChannelsArrayAttribute()
     {
         $extra_channels = [];
-        if (unserialize($this->extra_channels)) {
-            $extra_channels =  unserialize($this->extra_channels);
+        if ($this->extra_channels) {
+            if (@unserialize($this->extra_channels)) {
+                $extra_channels =  unserialize($this->extra_channels);
+            } else {
+                $extra_channels[] = $this->extra_channels;
+            }
         }
         return $extra_channels;
     }

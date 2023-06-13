@@ -45,7 +45,7 @@ class Note extends Model
 
     /*Get created user detail */
     public function users(){
-        return $this->belongsTo(User::class,'created_by','id');
+        return $this->belongsTo(User::class, 'created_by', 'id');
     }
     /* Get New Time */
     public function gettimeAgoAttribute(){
@@ -53,7 +53,7 @@ class Note extends Model
     }
     /*Get Note types */
     public function noteType(){
-        return $this->hasOne(NoteType::class,'id','note_type_id');
+        return $this->hasOne(NoteType::class, 'id', 'note_type_id');
     }
-    
+
 }

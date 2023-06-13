@@ -58,7 +58,7 @@ class AssignedContact extends Model
     }
     public function assigned_to_details()
     {
-        return $this->belongsTo(User::class, 'assigned_to_id')->select('id', 'first_name', 'last_name','profile_picture');
+        return $this->belongsTo(User::class, 'assigned_to_id')->select('id', 'first_name', 'last_name', 'profile_picture');
     }
     public function assigned_by_details()
     {

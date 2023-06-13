@@ -5,7 +5,7 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\GlobalFile;
-use Str;
+use Illuminate\Support\Str;
 use Validator;
 use App\Models\CompanyContact;
 use App\Models\Note;
@@ -14,16 +14,14 @@ use Carbon\Carbon;
 use App\Models\FolderType;
 use App\Models\Folder;
 use App\Models\FolderFile;
-use App\Http\Controllers\Functions;
 use App\Models\Protocol;
 
 class GlobalFileController extends Controller
 {
-    use Functions;
-
     /* Listing file */
     public function list(Request $request)
     {
+        //Validation
         $this->validate($request, [
             'search'          => 'nullable',
             'company_related' => 'nullable|exists:contacts,id',
@@ -44,32 +42,28 @@ class GlobalFileController extends Controller
         if ($request->search) {
             $search = $request->search;
             $query = $query->where(function ($query) use ($search, $request) {
-                $query->where('file_name', 'LIKE', '%' . $search . '%')
-                    ->when($request->is_message, function ($q) use ($search) {
-                        $q->orWhere('message', 'LIKE', '%' . $search . '%');
+                $query->where('file_name', 'LIKE', "%{$search}%")
+                    ->when($request->is_message, function ($subquery) use ($search) {
+                        $subquery->orWhere('message', 'LIKE', "%{$search}%");
                     })
-                    ->orWhereHas('user', function ($q) use ($search) {
-                        $q->where('first_name', 'LIKE', '%' . $search . '%')
-                            ->orWhere('last_name', 'LIKE', '%' . $search . '%');
+                    ->orWhereHas('user', function ($subquery) use ($search) {
+                        $subquery->where('first_name', 'LIKE', "%{$search}%")
+                            ->orWhere('last_name', 'LIKE', "%{$search}%");
                     })
-                    ->orWhereHas('companyContact', function ($q) use ($search) {
-                        $q->where('company_name', 'LIKE', '%' . $search . '%');
+                    ->orWhereHas('companyContact', function ($subquery) use ($search) {
+                        $subquery->where('company_name', 'LIKE', "%{$search}%");
                     })
-                    ->orWhereHas('peopleContact', function ($q) use ($search) {
-                        $q->where('first_name', 'LIKE', '%' . $search . '%')
-                            ->orWhere('last_name', 'LIKE', '%' . $search . '%');
+                    ->orWhereHas('peopleContact', function ($subquery) use ($search) {
+                        $subquery->where('first_name', 'LIKE', "%{$search}%")
+                            ->orWhere('last_name', 'LIKE', "%{$search}%");
                     });
             });
         }
 
         /* For Pagination functionality*/
-        $count = $query->count();
-        if ($request->page && $request->perPage) {
-            $page       = $request->page;
-            $perPage    = $request->perPage;
-            $query      = $query->skip($perPage * ($page - 1))->take($perPage);
-        }
-        $files = $query->orderBy('created_at', 'DESC')->get();
+        $result = filterSortPagination($query);
+        $files = $result['query']->get();
+        $count  = $result['count'];
 
         return ok(__('File list'), [
             'files' => $files,
@@ -80,15 +74,17 @@ class GlobalFileController extends Controller
     /* Store multiple file upload */
     public function store(Request $request)
     {
-
+        //Validation
         $this->validate($request, [
             'uploaded_file'   => 'required',
-            'uploaded_file.*' =>  'mimes:png,csv,pdf,doc,docx,txt,xls,xlsx,jpg,jpeg|max:10240',
+            'uploaded_file.*' => 'mimes:png,csv,pdf,doc,docx,txt,xls,xlsx,jpg,jpeg|max:10240',
             'message'         => 'nullable|max:1000',
             'contact_related' => 'nullable|exists:contacts,id',
             'company_related' => 'nullable|exists:contacts,id',
         ], [
-            'uploaded_file.*.max' => 'The Uploaded file must not be greater than 10 MB. '
+            'uploaded_file.*'       => 'Invalid file type. Accepted file types are: .png, .jpeg, .PDF, .CSV, .XLS, .doc, .docx, .txt.',
+            'uploaded_file.*.max'   => 'You can not upload greater than 10 MB.',
+            'uploaded_file.*.mimes' => 'Invalid file type. Accepted file types are: .png, .jpeg, .PDF, .CSV, .XLS, .doc, .docx, .txt.',
         ]);
         /* Check company or contact to same company or another company */
         $query   = CompanyContact::query();
@@ -97,17 +93,18 @@ class GlobalFileController extends Controller
         $contact = (clone $query)->where('company_id', auth()->user()->company_id)->where('sub_type', 'P')->where('id', $request->contact_related)->exists();
 
         if (!$company && $request->company_related) {
-            return error(_('Can not add file to another team member company or company contact'), [], 'validation');
+            return error(__('Can not add file to another team member company or company contact'), [], 'validation');
         }
         if (!$contact && $request->contact_related) {
-            return error(_('Can not add file to another team member company or company contact'), [], 'validation');
+            return error(__('Can not add file to another team member company or company contact'), [], 'validation');
         }
         /* Upload files*/
         $files_added = count($request->uploaded_file);
 
         if ($request->has('uploaded_file')) {
             $upload_files = [];
-            foreach ($request->uploaded_file as $key => $value) {
+            $i = 0;
+            foreach ($request->uploaded_file as $value) {
 
                 $file            = $value;
                 $directory       = 'global_files';
@@ -117,10 +114,13 @@ class GlobalFileController extends Controller
 
                 /* Check file extension null or not */
                 if (empty($extension)) {
-                    return error(__('The uploaded_file must be a file of type: pdf, csv, xls, doc, docx, jpg, jpeg, png, text/plain'), [], 'validation');
+                    return error(__('Invalid file type. Accepted file types are: .png, .jpeg, .PDF, .CSV, .XLS, .doc, .docx, .txt.'), ['uploaded_file.' . $i => ['Invalid file type. Accepted file types are: .png, .jpeg, .PDF, .CSV, .XLS, .doc, .docx, .txt.']], 'validation');
                 }
                 if ($extension == "sql" || $extension == "SQL") {
-                    return error(__('The uploaded_file must be a file of type: pdf, csv, xls, doc, docx, jpg, jpeg, png, text/plain'), [], 'validation');
+                    return error(__('Invalid file type. Accepted file types are: .png, .jpeg, .PDF, .CSV, .XLS, .doc, .docx, .txt.'), ['uploaded_file.' . $i => ['Invalid file type. Accepted file types are: .png, .jpeg, .PDF, .CSV, .XLS, .doc, .docx, .txt.']], 'validation');
+                }
+                if (!in_array($extension, config('constants.FILE_EXTENTION'))) {
+                    return error(__('Invalid file type. Accepted file types are: .png, .jpeg, .PDF, .CSV, .XLS, .doc, .docx, .txt.'), ['uploaded_file.' . $i => ['Invalid file type. Accepted file types are: .png, .jpeg, .PDF, .CSV, .XLS, .doc, .docx, .txt.']], 'validation');
                 }
                 $upload_files[] = [
                     'id'             => Str::uuid(),
@@ -134,7 +134,9 @@ class GlobalFileController extends Controller
                     'contact_related' => $request->contact_related,
                     'created_at'     => Carbon::now(),
                 ];
+                $i++;
             }
+            // Create Global files
             GlobalFile::insert($upload_files);
 
             /* Sent notification when upload file */
@@ -152,16 +154,16 @@ class GlobalFileController extends Controller
                 if ($compnyName && $contactName) {
                     $message = auth()->user()->first_name . ' ' . auth()->user()->last_name . '' . ' has added a file to the' . $compnyName->company_name . ',' . $contactName->first_name . ' ' . $contactName->last_name . "'" . 's profile';
 
-                    $this->addProtocol($contactName->id, 'files', $protocolmessage);
-                    $this->addProtocol($compnyName->id, 'files', $protocolmessage);
+                    addProtocol($contactName->id, 'files', $protocolmessage);
+                    addProtocol($compnyName->id, 'files', $protocolmessage);
                 } else if ($compnyName) {
                     $message = auth()->user()->first_name . ' ' . auth()->user()->last_name . '' . ' has added a file to the ' . $compnyName->company_name . "'" . 's profile';
 
-                    $this->addProtocol($compnyName->id, 'files', $protocolmessage);
+                    addProtocol($compnyName->id, 'files', $protocolmessage);
                 } else {
                     $message = auth()->user()->first_name . ' ' . auth()->user()->last_name . '' . ' has added a file to the ' . $contactName->first_name . ' ' . $contactName->last_name . "'" . 's profile';
 
-                    $this->addProtocol($contactName->id, 'files', $protocolmessage);
+                    addProtocol($contactName->id, 'files', $protocolmessage);
                 }
                 $type  = 'file';
                 sentNotification($message, $type);
@@ -174,6 +176,7 @@ class GlobalFileController extends Controller
     /*Delete files */
     public function delete(Request $request)
     {
+        //Validation
         $this->validate($request, [
             'file_id'     => 'required|array|exists:global_files,id,deleted_at,NULL',
             'contact_id'  => 'required|exists:contacts,id',
@@ -213,7 +216,7 @@ class GlobalFileController extends Controller
     public function deleteglobalfiles(Request $request)
     {
         $this->validate($request, [
-            'file_id'     => 'required|array|exists:global_files,id,deleted_at,NULL',
+            'file_id' => 'required|array|exists:global_files,id,deleted_at,NULL',
         ]);
         $query = GlobalFile::query();
         /* Check file */
@@ -237,8 +240,9 @@ class GlobalFileController extends Controller
     }
 
     /*Delete folder files */
-    public function deletfolderfiles(Request $request)
+    public function deletfolderfiles(Request $request) // TODO: Currently not useing this api
     {
+        //Validation
         $this->validate($request, [
             'file_id' => 'required|array|exists:global_files,id,deleted_at,NULL',
             'folder_id'   => 'required|exists:folders,id',
@@ -260,9 +264,9 @@ class GlobalFileController extends Controller
     }
 
     /* create new folder and add multiple files*/
-    public function newfolder(Request $request)
+    public function newfolder(Request $request) // TODO: Currently not useing this api
     {
-
+        //Validation
         $this->validate($request, [
             'contact_id'      =>  'required|exists:contacts,id',
             'uploaded_file'   => 'required',
@@ -280,12 +284,13 @@ class GlobalFileController extends Controller
         $folder['description'] =  $request->description;
         $folder['contact_id'] = $request->contact_id;
         $folder['folder_type_id'] =  $request->folder_type_id;
-        $Newfolder = Folder::create($folder);
+        //create folder
+        $newfolder = Folder::create($folder);
 
         /* Upload files*/
         if ($request->has('uploaded_file')) {
             $upload_files = [];
-            foreach ($request->uploaded_file as $key => $value) {
+            foreach ($request->uploaded_file as $value) {
 
                 $file            = $value;
                 $directory       = 'global_files';
@@ -302,30 +307,32 @@ class GlobalFileController extends Controller
                 }
 
                 $upload_files = [];
-                $upload_files['id'] = Str::uuid();
-                $upload_files['company_id'] = auth()->user()->company_id;
-                $upload_files['contact_id'] =  $request->contact_id;
+                $upload_files['id']            = Str::uuid();
+                $upload_files['company_id']    = auth()->user()->company_id;
+                $upload_files['contact_id']    = $request->contact_id;
                 $upload_files['uploaded_file'] = $upload_file;
-                $upload_files['file_name'] = $filename;
-                $upload_files['file_type'] = $extension;
-                $upload_files['created_by'] = auth()->user()->id;
-                $upload_files['created_at'] = Carbon::now();
+                $upload_files['file_name']     = $filename;
+                $upload_files['file_type']     = $extension;
+                $upload_files['created_by']    = auth()->user()->id;
+                $upload_files['created_at']    = Carbon::now();
+                // create global file
                 $GlobalFile = GlobalFile::create($upload_files);
 
                 $folder_files = [];
-                $folder_files['folder_id'] = $Newfolder->id;
+                $folder_files['folder_id'] = $newfolder->id;
                 $folder_files['file_id'] = $GlobalFile->id;
-                $FolderFile = FolderFile::create($folder_files);
+                // create folder file
+                FolderFile::create($folder_files);
             }
 
-            return ok(__('Folder created successfully'), $Newfolder);
+            return ok(__('Folder created successfully'), $newfolder);
         }
     }
 
     /* create new folder and add multiple files*/
-    public function listfiles(Request $request)
+    public function listfiles(Request $request) // TODO: Currently not useing this api
     {
-
+        //Validation
         $this->validate($request, [
             'folder_id'   => 'required|exists:folders,id',
             'page'      => 'required|integer|min:1',
@@ -335,7 +342,7 @@ class GlobalFileController extends Controller
 
         $Folder = Folder::findOrFail($request->folder_id);
         if (!$Folder) {
-            return $this->sendResponse(false, 'Unable to find the Folder.');
+            return error('Unable to find the Folder.',[],'validation');
         }
 
         $folderFile = FolderFile::where('folder_id', $request->folder_id)->pluck('file_id')->toArray();
@@ -359,14 +366,10 @@ class GlobalFileController extends Controller
             });
         }
 
-        /**For pagination */
-        $paginateDetails = $this->getPaginationDetails($request->page, $request->perPage);
-        $page    = $paginateDetails['page'];
-        $perPage = $paginateDetails['perPage'];
-        $count = $query->count();
-        $query->skip($perPage * ($page - 1))->take($perPage);
-
-        $files = $query->orderBy('created_at', 'DESC')->get();
+        /*For pagination and sorting filter*/
+        $result = filterSortPagination($query);
+        $files = $result['query']->get();
+        $count  = $result['count'];
 
         return ok(__('File list'), [
             'files' => $files,
@@ -378,24 +381,27 @@ class GlobalFileController extends Controller
 
     public function listNoteType(Request $request)
     {
+        // Get All Note Type
         $noteType = NoteType::where('company_id', auth()->user()->company_id)->Orwhere('company_id', NULL)->orderBy('created_at', 'DESC')->get();
         return ok(__('Note Type'), $noteType);
     }
     /* Store note type */
     public function storeNoteType(Request $request)
     {
+        //Validation
         $this->validate($request, [
-            'name'          => 'required|max:64|unique:note_types,name,NULL,id,deleted_at,NULL',
-            'contact_id'    => 'required|exists:contacts,id',
-
+            'name'       => 'required|max:64|unique:note_types,name,NULL,id,deleted_at,NULL',
+            'contact_id' => 'required|exists:contacts,id',
         ]);
 
         $request['icon_url']   = 'common.svg';
         $request['company_id'] = auth()->user()->company_id;
+        // Create note type
         $noteType = NoteType::create($request->only('name', 'icon_url', 'company_id'));
 
         $protocolmessage = auth()->user()->first_name . ' ' . auth()->user()->last_name . ' has created a new note type';
-        $this->addProtocol($request->contact_id, 'notes', $protocolmessage);
+        // Add protocol
+        addProtocol($request->contact_id, 'notes', $protocolmessage);
 
         return ok(__('Note type stored successfully'), $noteType);
     }
@@ -403,7 +409,7 @@ class GlobalFileController extends Controller
     /*store notes */
     public function addNote(Request $request)
     {
-
+        //Validation
         $this->validate($request, [
             'contact_id'   => 'required|exists:contacts,id',
             'subject'      => 'required|max:100',
@@ -441,6 +447,7 @@ class GlobalFileController extends Controller
         $request['sub_type'] = $contact->sub_type;
         $request['company_id'] = auth()->user()->company_id;
         $request['note_type_id'] = $noteTypeId;
+        //Create Note
         $note = Note::create($request->only('sub_type', 'contact_id', 'subject', 'note_type_id', 'note_content', 'company_id'));
 
         /*Sent notification when note create */
@@ -453,51 +460,54 @@ class GlobalFileController extends Controller
         $type = 'note';
 
         $protocolmessage = auth()->user()->first_name . ' ' . auth()->user()->last_name . ' has added a note';
-        $this->addProtocol($request->contact_id, 'notes', $protocolmessage);
-
+        // Add protocol
+        addProtocol($request->contact_id, 'notes', $protocolmessage);
+        // Sent note created notification
         sentNotification($message, $type);
         return ok(__('Note created succesfully'), $note);
     }
     /* List of notes */
     public function listNote(Request $request)
     {
+        //Validation
         $this->validate($request, [
-            'contact_id' => 'required|exists:contacts,id',
-            'page'      => 'nullable',
-            'perPage'   => 'nullable',
+            'contact_id'   => 'required|exists:contacts,id',
+            'page'         => 'nullable',
+            'perPage'      => 'nullable',
             'note_type_id' => 'nullable',
         ]);
 
         ini_set('memory_limit', '-1');
+        // Get Notes
         $noteQuery = Note::where('contact_id', $request->contact_id)->with('users:id,first_name,last_name', 'noteType:id,icon_url,name')->where('company_id', auth()->user()->company_id);
 
+        // Note type filter
         if ($request->note_type_id) {
-            $noteQuery = $noteQuery->whereHas('noteType', function ($q) use ($request) {
-                $q->where('id', $request->note_type_id);
+            $noteQuery = $noteQuery->whereHas('noteType', function ($subquery) use ($request) {
+                $subquery->where('id', $request->note_type_id);
             });
         }
-        $count = $noteQuery->count();
-        /*Set Pagination */
-        if ($request->page && $request->perPage) {
-            $page           = $request->page;
-            $perPage        = $request->perPage;
-            $noteQuery      = $noteQuery->skip($perPage * ($page - 1))->take($perPage);
-        }
-        $notes = $noteQuery->orderBy('created_at', 'DESC')->get();
-        return ok(__('Notes'), [
+        // Pagination and shorting filter
+        $result = filterSortPagination($noteQuery);
+        $notes  = $result['query']->get();
+        $count  = $result['count'];
+
+        return ok(__('Note list'), [
             'notes' => $notes,
             'count' => $count
         ]);
     }
 
     /* View of note */
-    public function viewNote(Request $request)
+    public function viewNote(Request $request) // TODO: "not use this api"
     {
+        //Validation
         $this->validate($request, [
-            'note_id'   => 'required|exists:notes,id',
+            'note_id'    => 'required|exists:notes,id',
             'contact_id' => 'required|exists:contacts,id'
         ]);
 
+        // Get Note
         $note = Note::with('users:id,first_name,last_name', 'noteType:id,name,icon_url')->where('id', $request->note_id)->where('company_id', auth()->user()->company_id)->where('contact_id', $request->contact_id)->first();
         if (!$note) {
             return error(__('Note not found'), [], 'validation');
@@ -507,6 +517,7 @@ class GlobalFileController extends Controller
     /*Edit note */
     public function editNote(Request $request)
     {
+        //Validation
         $this->validate($request, [
             'note_id'      => 'required|exists:notes,id',
             'note_type_id' => 'required|max:64',
@@ -533,19 +544,23 @@ class GlobalFileController extends Controller
         } else {
             $noteTypeId          = $request->note_type_id;
         }
+        // Find note
         $note = Note::where('id', $request->note_id)->where('company_id', auth()->user()->company_id)->first();
         if (!$note) {
             return error(__('Note not found'), [], 'validation');
         }
         $request['note_type_id'] = $noteTypeId;
+        // Update note
         $note->update($request->only('note_content', 'note_type_id', 'subject'));
 
         $protocolmessage = auth()->user()->first_name . ' ' . auth()->user()->last_name . ' has updated a note';
-        $this->addProtocol($note->contact_id, 'notes', $protocolmessage);
+        // Add protocol
+        addProtocol($note->contact_id, 'notes', $protocolmessage);
 
         /* Sent notification when update note */
         $message = auth()->user()->first_name . ' ' . auth()->user()->last_name . ' has updated a note';
         $type    = 'note';
+        // Sent note update notification
         sentNotification($message, $type);
         return ok(__('Note updated successfully'), $note);
     }

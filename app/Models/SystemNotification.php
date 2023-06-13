@@ -24,12 +24,12 @@ class SystemNotification extends Model
     ];
 
     /*Get time ago attribute */
-    
     public function gettimeAgoAttribute(){
         return $this->created_at->diffForHumans();
     }
+
     /*Get full icon url */
     public function getIconUrlAttribute(){
-        return 'https://leadip-v2-s3-test.s3.ap-south-1.amazonaws.com/notification/'.$this->icon;
+        return config('constants.AWS_URL') .'/notification/' . $this->icon;
     }
 }

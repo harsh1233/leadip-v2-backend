@@ -3,7 +3,6 @@
 namespace App\Exceptions;
 
 use Throwable;
-use App\Http\Controllers\Functions;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
@@ -20,8 +19,6 @@ use Illuminate\Auth\AuthenticationException;
 
 class Handler extends ExceptionHandler
 {
-    use Functions;
-
     /**
      * A list of the exception types that are not reported.
      *
@@ -94,7 +91,7 @@ class Handler extends ExceptionHandler
                 $ids = implode(', ', $exception->getIds());
 
                 if ($exception->getIds()) {
-                    $message = __(":model with id `$ids` not found.", ['model' => $model]);
+                    $message = __(":model with id `{$ids}` not found.", ['model' => $model]);
                 }
                 return error($message);
             } elseif ($exception instanceof RequestException) {

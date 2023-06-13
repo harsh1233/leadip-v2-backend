@@ -5,7 +5,7 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
-use Mail;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\Rules\Password;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\{Auth, Hash, Redirect};
@@ -41,12 +41,12 @@ class AuthController extends Controller
         $token = Str::random(20);
 
         $request['password']                    = Hash::make($request->password);
-        $request['role_id']                     = Role::where('name', 'Super Admin')->first()->id;
+        $request['role_id']                     = Role::where('name', config('constants.super_admin'))->first()->id;
         $request['company_id']                  = $company->id;
         $request['verification_token']          = $token;
         $request['verification_token_expiry']   = date('Y-m-d H:i:s', strtotime("+48 hours"));
         $request['is_email_verified']           = null;
-        $request['onboarding_status']           = "I";
+        $request['onboarding_status']           = "I"; // I = Invited
 
         // create user
         $user = User::create($request->only('first_name', 'last_name', 'email', 'password', 'role_id', 'company_id', 'verification_token', 'verification_token_expiry', 'is_email_verified', 'onboarding_status'));
@@ -80,25 +80,27 @@ class AuthController extends Controller
             'token'  => 'required'
         ]);
         $data = [];
+        //Get User
         $user = User::where('email', $request->email)->where('verification_token', $request->token)->first();
 
         if (empty($user)) {
             return error(__('Email id or token is invalid!'), [], 'validation');
         }
-        $user->load('role:id,name');
+
         if (!empty($user->is_email_verified)) {
             return error(__('Email is already verified!'), [], 'validation');
         } else {
-
             // user verification token expiry
-            if ($user->verification_token_expiry < date('Y-m-d H:i:s')) {
+            if ($user->verification_token_expiry <= date('Y-m-d H:i:s')) {
                 return error(__('The verification link has expired!'), [], 'validation');
             }
+            //load User role details
+            $user->load('role:id,name');
+
             // active user verification
             $user->update([
                 'is_email_verified'  => Carbon::now(),
                 'onboarding_status'  => 'YP',
-                // 'verification_token' => ''
             ]);
 
             $data['token']           = $user->createToken('auth-token')->plainTextToken;
@@ -124,6 +126,7 @@ class AuthController extends Controller
             'email.exists' => 'Please enter registered email'
         ]);
 
+        //Get User
         $user = User::where('email', $request->email)->first();
         if ($user->deleted_at != null) {
             return error(__('Your account has been deleted'), [], 'validation');
@@ -143,22 +146,22 @@ class AuthController extends Controller
             $success['token'] =  $user->createToken('api-token')->plainTextToken;
             $success['user']  =  $user;
 
-            //$moduleCode        =ModulePermissionRole::whereIn('role_id',[$user->role_id])->distinct('module_code')->pluck('module_code')->toArray();
-
-            //$success['module'] = Module::with('permissions')->get()->pluck('permissions.*.module_code','permission_code');
             /*Get Module wise permission */
             $modules = Module::with('permissions')->get();
             foreach ($modules as $module) {
                 $permissions = [];
+                // modified permissions array to object
                 foreach ($module->permissions as $permission) {
-                    //dd($permission->permission_code);
                     $permissions[$permission->permission_code] = $permission->has_access;
                 }
 
+                // Remove old permissions key
                 unset($module->permissions);
+                // Set new permissions key value
                 $module->permissions = (object) $permissions;
             }
             $success['module'] = $modules;
+            //Sent login notification
             sentUserNotification();
             return ok(__('Signed in successfully!'), $success);
         } else if ($user->social_type != null) {
@@ -173,7 +176,7 @@ class AuthController extends Controller
             if ($user->social_type == 'G') {
                 $full_name = 'Google';
             }
-            return error(__("You have already signed up through $full_name with this email, please try signing up through $full_name"), [], 'validation');
+            return error(__("You have already signed up through {$full_name} with this email, please try signing up through {$full_name}"), [], 'validation');
         } else {
             return error(__('The credentials are invalid!'), [], 'validation');
         }
@@ -195,8 +198,6 @@ class AuthController extends Controller
         if($token){
             $token->delete();
         }
-        //$user = auth()->user();
-        //$user->currentAccessToken()->delete();
         return ok(__('Logout Successful!'));
     }
 
@@ -231,13 +232,14 @@ class AuthController extends Controller
             if ($user->social_type == 'G') {
                 $full_name = 'Google';
             }
-            return error(__("You can not reset your password as you have logged in through $full_name"), [], 'validation');
+            return error(__("You can not reset your password as you have logged in through {$full_name}"), [], 'validation');
         }
+        $query = PasswordReset::query();
         // delete old token for PasswordReset
-        PasswordReset::where('email', $request->email)->delete();
+        (clone $query)->where('email', $request->email)->delete();
 
         // create new token for PasswordReset
-        PasswordReset::create([
+        (clone $query)->create([
             'email' => $user->email,
             'token' => $token
         ]);
@@ -266,7 +268,8 @@ class AuthController extends Controller
         ]);
 
         $user  = User::where('email', $request->email)->first();
-        $token = PasswordReset::where('token', $request->token)->where('email', $request->email)->first();
+        $query = PasswordReset::query();
+        $token = (clone $query)->where('token', $request->token)->where('email', $request->email)->first();
 
         // check user and token exist or not
         if (!$user || !$token) {
@@ -276,7 +279,7 @@ class AuthController extends Controller
             'password'   => Hash::make($request->password)
         ]);
         // delete old token for PasswordReset
-        PasswordReset::where('email', $request->email)->delete();
+        (clone $query)->where('email', $request->email)->delete();
         return ok(__('Password reset successfully!'));
     }
 
@@ -310,37 +313,10 @@ class AuthController extends Controller
             'password' => Hash::make($request->new_password),
         ]);
 
-        // Auth::logout();
-
-        // $request->session()->invalidate();
-
-        // $request->session()->regenerateToken();
-
         if($request->is_force_logout)
         {
-            //Auth::guard('api')->logoutOtherDevices($request->new_password);
-            //auth('sanctum')->user()->tokens()->delete();
             auth()->user()->tokens()->delete();
-            //$user = $request->user();
-            //PersonalAccessToken::where('tokenable_id', $user->id) ->where('tokenable_type', get_class($user))->delete();
         }
-
-        //Auth::user()->tokens()->delete();
-        // auth()->guard('api')->logout();
-        // Auth::logoutOtherDevices($request->new_password);
-
-
-        /* OLD MAHESH CODE : Logout from all devices */
-        // if ($request->is_force_logout) {
-
-        // $accessToken = $request->bearerToken();
-        // Auth::user()->tokens->each(function ($token, $key) {
-        //     $token->delete();
-        // });
-        // $token       = PersonalAccessToken::findToken($accessToken);
-        //                PersonalAccessToken::whereIn('tokenable_id',[$token->tokenable_id])->delete();
-        // }
-
         return ok(__('Password changed successfully!'), $user);
     }
 
@@ -352,13 +328,15 @@ class AuthController extends Controller
      */
     public function getCompanyDetail(Request $request)
     {
-        //$company = auth()->user()->company;
         $user = User::with('company.offices.country_details', 'company.offices.city_details')->select('id', 'first_name', 'last_name', 'company_id')->find(auth()->user()->id);
         return ok(__('Compnay detail of authentication user!'), $user);
     }
 
     /**
      * Checks uniqueness of organization name and email
+     *
+     * @param  mixed $request
+     * @return void
      */
     public function checkUniqueFields(Request $request)
     {
@@ -384,7 +362,7 @@ class AuthController extends Controller
             if ($user->deleted_at != null) {
                 return error(__('The email has already been taken.'), [], 'validation');
             }
-            return error(__("You have already signed up through $full_name with this email, please try signing up through $full_name"), [], 'validation');
+            return error(__("You have already signed up through {$full_name} with this email, please try signing up through {$full_name}"), [], 'validation');
         }
         if ($user) {
             return error(__('The email has already been taken.'), [], 'validation');
@@ -392,7 +370,12 @@ class AuthController extends Controller
         return ok(__('Unique field verified successfully!'));
     }
 
-    /* Check token */
+    /**
+     * Check token
+     *
+     * @param  mixed $request
+     * @return void
+     */
     public function checkToken(Request $request)
     {
 
@@ -405,7 +388,7 @@ class AuthController extends Controller
 
         // check user and token exist or not
         if (!$user || !$token) {
-            return error(__('User/Password reset token not found.'), [], 'validation');
+            return error(__('You have already reset your password using this link, Please again request in order to reset your password again.'), [], 'validation');
         }
         return ok(__('ok'));
     }

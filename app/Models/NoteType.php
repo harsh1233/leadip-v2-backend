@@ -11,7 +11,7 @@ class NoteType extends Model
     use HasFactory, UuidTrait;
 
     protected $fillable =[
-        
+
         'name',
         'icon_url',
         'company_id'
@@ -20,6 +20,6 @@ class NoteType extends Model
     protected $appends =['icon'];
 
     public function getIconAttribute(){
-        return 'https://leadip-v2-s3-test.s3.ap-south-1.amazonaws.com/NoteTypes/'.$this->icon_url;
+        return config('constants.AWS_URL') . '/NoteTypes/' . $this->icon_url;
     }
 }

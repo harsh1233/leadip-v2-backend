@@ -26,7 +26,15 @@ class CheckRole
                 break;
             }
         }
-        if (!$status) return error(__("Sorry, you don't have permission to access this page"), [], 'forbidden');
+        if (!$status && ('App\\Http\\Controllers\\API\\TeamController@addMember' == $request->route()->getActionName())) {
+            return error(__("You don't have permission to add the member"), [], 'forbidden');
+        }
+        if (!$status && ('App\\Http\\Controllers\\API\\TeamController@updateMember' == $request->route()->getActionName())) {
+            return error(__("You don't have permission to update this member"), [], 'forbidden');
+        }
+        if (!$status) {
+            return error(__("Sorry, you don't have permission to access this page"), [], 'forbidden');
+        }
         return $next($request);
     }
 }

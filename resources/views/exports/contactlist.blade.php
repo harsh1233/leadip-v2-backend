@@ -9,7 +9,7 @@
         </tr>
     </thead>
     <tbody>
-        @foreach($contactlist as $key=>$value)
+        @foreach($contactlist as $value)
         <tr>
             <td>{{ $value->name }}</td>
             <td>{{ date('d.m.Y',strtotime($value->created_at)) }}</td>

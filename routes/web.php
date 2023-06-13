@@ -1,8 +1,8 @@
 <?php
 
-use App\Http\Controllers\API\SocialAuthController;
 use App\Http\Controllers\API\OutlookController;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\API\SocialAuthController;
 
 /*
 |--------------------------------------------------------------------------
@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-Route::get('/' , function(){
+Route::get('/', function(){
     return ok('Welcome to leadip-v2 Backend');
 });
 Route::group(['middleware' => ['web']], function () {

@@ -6,13 +6,13 @@ use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
-use Mail;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Support\Facades\{Auth, Hash, Redirect};
 use App\Models\{Company, User, UserDetail, UserLocation, CompanyOffice, Role, UserLanguage};
 use App\Mail\{InvitationMail};
 use Illuminate\Support\Facades\Storage;
-use URL;
+use Illuminate\Support\Facades\URL;
 use App\Models\SystemNotification;
 use App\Models\Industry;
 use App\Models\PreferenceIndustry;
@@ -30,6 +30,7 @@ class UserController extends Controller
      */
     public function aboutCompanyUpdate(Request $request)
     {
+        //Validation
         $this->validate($request, [
             'organization_name' => 'nullable', // this filed will be used for social media signup user
             'country_code'      => 'required|exists:countries,code',
@@ -47,15 +48,10 @@ class UserController extends Controller
                 'email'     => $request->email,
                 'website'   => $request->website
             ]);
-            //auth()->user()->update(['company_id' => $company->id]);
             $user->update(['company_id' => $company->id]);
         } else {
-
-            //$company = auth()->user()->company;
-            $company = $user->company;
-
-            $company->updateOrCreate(
-                ['id'        => $company->id],
+            $user->company->updateOrCreate(
+                ['id'        => $user->company->id],
                 [
                     'email'     =>  $request->email,
                     'website'    =>  $request->website
@@ -64,10 +60,10 @@ class UserController extends Controller
         }
 
         // update company office information
-        if ($company->offices) {
-            $company->offices()->updateOrCreate(
+        if ($user->company->offices) {
+            $user->company->offices()->updateOrCreate(
                 [
-                    'id'  => $company->offices->first() ? $company->offices()->first()->id : null
+                    'id'  => $user->company->offices->first() ? $user->company->offices()->first()->id : null
                 ],
 
                 [
@@ -75,27 +71,24 @@ class UserController extends Controller
                     'city_id' => $request->city_id,
                 ]
             );
-        } else {
-            CompanyOffice::create([
-                'company_id'    => $company->id,
-                'country_code'  => $request->country_code,
-                'city_id'       => $request->city_id,
-            ]);
         }
+        // else {
+        //     CompanyOffice::create([
+        //         'company_id'    => $user->company->id,
+        //         'country_code'  => $request->country_code,
+        //         'city_id'       => $request->city_id,
+        //     ]);
+        // }
 
         // After completing first step, user status should be update to AT
         $newStatus = 'AT';
-        // if (auth()->user()->onboarding_status == 'SC') {
-        //     $newStatus = 'SC';
-        // }
+
         if ($user->onboarding_status == 'SC') {
             $newStatus = 'SC';
         }
-        //auth()->user()->update(['onboarding_status' => $newStatus]);
         $user->update(['onboarding_status' => $newStatus]);
 
         $user->load('company.offices');
-        //return ok(__('Company registered successfully!'), auth()->user()->load('company.offices'));
         return ok(__('Company registered successfully!'), $user);
     }
 
@@ -107,6 +100,7 @@ class UserController extends Controller
      */
     public function update(Request $request)
     {
+        //Validation
         $this->validate($request, [
             'profile_picture'                         =>  'nullable|mimes:png,jpg,jpeg|max:5120',
             'first_name'                              =>  'required|min:3|max:30|regex:/^[\pL\s\-]+$/u',
@@ -166,12 +160,9 @@ class UserController extends Controller
         if ($request->input('extra_channels')) {
             $extra_channels = serialize($request->input('extra_channels'));
         }
-        // else {
-        //     $extra_channels = $user->company->extra_channels;
-        // }
 
         // create or update user details
-        $user_detail = UserDetail::updateOrCreate([
+        $userDetail = UserDetail::updateOrCreate([
             'user_id'           =>  $user->id,
         ], [
             'description'       =>  $request->description,
@@ -193,7 +184,7 @@ class UserController extends Controller
             // delete old location
             $user->userLocations()->delete();
 
-            foreach ($request['location'] as $key => $location) {
+            foreach ($request['location'] as $location) {
 
                 $user->userLocations()->create([
                     'address'       => $location['address'],
@@ -209,10 +200,9 @@ class UserController extends Controller
             // delete old languages
             $user->userLanguages()->delete();
 
-            foreach ($request['languages'] as $key => $language) {
+            foreach ($request['languages'] as $language) {
 
                 $user->userLanguages()->create([
-                    // 'user_id'               => $request->user_id,
                     'language_id'           => $language['language_id'] ?? null,
                     'proficiency_level'     => $language['proficiency_level'] ?? null,
                 ]);
@@ -225,20 +215,20 @@ class UserController extends Controller
             // delete old certifications
             $user->userCertifications()->delete();
 
-            foreach ($request['certifications'] as $key => $certification) {
+            foreach ($request['certifications'] as $certification) {
 
                 $user->userCertifications()->create([
-                    //'user_id'               => $request->user_id,
                     'name'                  => $certification['name'] ?? '',
                     'issuing_organization'  => $certification['issuing_organization'] ?? '',
                     'issue_date'            => $certification['issue_date'] ??  null,
                 ]);
             }
         }
+        //sent profile updated notification
         sentUserNotification();
         return ok(__('profile updated successfully!'), [
             'user'          =>  $user,
-            'user_detail'   =>  $user_detail
+            'user_detail'   =>  $userDetail
         ]);
     }
 
@@ -256,16 +246,17 @@ class UserController extends Controller
         if (count(array_unique($requestEmails)) < count($requestEmails)) {
             return error(__('Email address has already been taken'), [], 'validation');
         }
-
+        //Validation
         $this->validate($request, [
-            'team'                  => 'nullable|array',
+            'team'                   => 'nullable|array',
             'is_team_record_updated' => 'nullable|boolean',
-            'team.*.first_name'     => 'nullable|min:3|max:30|regex:/^[\pL\s\-]+$/u',
-            'team.*.last_name'      => 'nullable|min:3|max:30|regex:/^[\pL\s\-]+$/u',
-            'team.*.email'          => 'nullable|email',
-            'team.*.role'           => 'nullable|exists:roles,id',
+            'team.*.first_name'      => 'nullable|min:3|max:30|regex:/^[\pL\s\-]+$/u',
+            'team.*.last_name'       => 'nullable|min:3|max:30|regex:/^[\pL\s\-]+$/u',
+            'team.*.email'           => 'nullable|email',
+            'team.*.role'            => 'nullable|exists:roles,id',
         ]);
-        $exitsEmail = User::whereIn('email', $requestEmails)->where('company_id', '!=', auth()->user()->company_id)->pluck('email')->toArray();
+        $userQuery = User::query();
+        $exitsEmail = (clone $userQuery)->whereIn('email', $requestEmails)->where('company_id', '!=', auth()->user()->company_id)->pluck('email')->toArray();
         if (!empty($exitsEmail)) {
             $email = implode(",", $exitsEmail);
             return error(__($email . ' email has already been taken. '), [], 'validation');
@@ -273,10 +264,9 @@ class UserController extends Controller
         $users = [];
         if (isset($request['team']) && count($request['team']) > 0) {
 
-            $authUser = auth()->user();
-            foreach ($request['team'] as $key => $member) {
+            foreach ($request['team'] as $member) {
                 // create users
-                $invitedUser = User::updateOrCreate(
+                $invitedUser = (clone $userQuery)->updateOrCreate(
                     [
                         'email'                 =>  $member['email'] ?? '',
                     ],
@@ -285,29 +275,30 @@ class UserController extends Controller
                         'last_name'             =>  $member['last_name'] ?? '',
                         'email'                 =>  $member['email'] ?? '',
                         'role_id'               =>  $member['role'] ? $member['role'] : null,
-                        'company_id'            =>  $authUser->company_id,
+                        'company_id'            =>  auth()->user()->company_id,
                         'is_email_verified'     =>  Carbon::now(),
-                        'onboarding_status'     =>  "I",
+                        'onboarding_status'     =>  "I", // I = Invited
                     ]
                 );
-                //$token = $invitedUser->createToken('auth-token')->plainTextToken;
+
                 $token = strtolower(str()->random(16));
-                // get company name
-                $company_name = $authUser->company->name;
 
                 if ($invitedUser->updated_by == NULL) {
-                    Mail::to($invitedUser->email)->send(new InvitationMail($authUser, $token, $invitedUser, $company_name));
+                    //Update user verification token and token expiry time
+                    $invitedUser->update(["verification_token" => $token, "verification_token_expiry" => date('Y-m-d H:i:s', strtotime("+48 hours"))]);
+                    //send invitation mail to team member
+                    Mail::to($invitedUser->email)->send(new InvitationMail(auth()->user(), $token, $invitedUser, auth()->user()->company->name));
                     sleep(1);
                 }
                 $users[] = $invitedUser;
             }
 
-            $usersData = User::where('email', '!=', auth()->user()->email)
+            (clone $userQuery)->where('email', '!=', auth()->user()->email)
                 ->where('company_id', auth()->user()->company_id)
                 ->whereNotIn('email', $requestEmails)
                 ->delete();
         } else {
-            $usersData = User::where('email', '!=', auth()->user()->email)
+            (clone $userQuery)->where('email', '!=', auth()->user()->email)
                 ->where('company_id', auth()->user()->company_id)
                 ->delete();
         }
@@ -320,7 +311,6 @@ class UserController extends Controller
             } else {
                 return ok('', auth()->user());
             }
-            //return ok(__('Invitation sent to the added team members successfully!'), auth()->user());
         } else {
             return ok('', auth()->user());
         }
@@ -335,7 +325,6 @@ class UserController extends Controller
     public function createPassword(Request $request) // Todo : changes as requried front end
     {
         $this->validate($request, [
-            //'user_id'           => 'required',
             'first_name'        => 'required|min:3|max:30|regex:/^[\pL\s\-]+$/u',
             'last_name'         => 'required|min:3|max:30|regex:/^[\pL\s\-]+$/u',
             'password'          => [
@@ -360,7 +349,7 @@ class UserController extends Controller
         ]);
 
         $message = $request->first_name . ' ' . $request->last_name . ' has recently joined the ' . $user->company->name . "'s network";
-        $role    = Role::where('name', 'Super Admin')->first();
+        $role    = Role::where('name', config('constants.super_admin'))->first();
         $admin   = User::where('company_id', $user->company_id)->where('role_id', $role->id)->first();
         $notification = [
             'sender_id'  => $user->id,
@@ -383,24 +372,23 @@ class UserController extends Controller
         $user = User::where('id', auth()->user()->id)->first();
         if(!$user)
         {
-
+            return error(__('User not found!'), [], 'validation');
         }
         // After completing third step (sync contact), user status should be update to CO
         $user->update([
             'is_onboarded'          => true,
             'onboarding_status'     => 'CO'
         ]);
-        //$user = auth()->user();
+
         $user->load('role:id,name');
         /*Set Roles and permissions */
         $modules = Module::with('permissions')->get();
         foreach ($modules as $module) {
             $permissions = [];
             foreach ($module->permissions as $permission) {
-                //dd($permission->permission_code);
                 $permissions[$permission->permission_code] = $permission->has_access;
             }
-
+            // remove old permissions object and add new permissions object
             unset($module->permissions);
             $module->permissions = (object) $permissions;
         }
@@ -408,15 +396,19 @@ class UserController extends Controller
         return ok(__('Welcome to Leadip!'), $user);
     }
 
-    public function updateOnboardStatus(Request $request)
+    /**
+     * update Onboard Status api
+     *
+     * @param  mixed $request
+     * @return void
+     */
+    public function updateOnboardStatus(Request $request) // TODO: "not use this api"
     {
         $request->validate([
-            //'user_id'               => 'required|exists:users,id',
             'onboarding_status'     => 'required|in:YC,AT,SC',
             'is_onboarded'          => 'required|boolean'
         ]);
 
-        //$user = User::findOrFail($request->user_id);
         $user = auth()->user();
         $user->update(['is_onboarded' => $request->is_onboarded, 'onboarding_status' => $request->onboarding_status]);
 
@@ -429,10 +421,9 @@ class UserController extends Controller
      * @param  mixed $request
      * @return void
      */
-    public function userProfile(Request $request)
+    public function userProfile(Request $request) // TODO: "not use this api"
     {
         $this->validate($request, [
-            //'user_id'           =>  'required|exists:users,id',
             'profile_picture'   =>  'nullable|mimes:png,jpg,jpeg|max:5120',
             'first_name'        =>  'required|min:3|max:30|regex:/^[\pL\s\-]+$/u',
             'last_name'         =>  'required|min:3|max:30|regex:/^[\pL\s\-]+$/u',
@@ -444,7 +435,6 @@ class UserController extends Controller
             'profile_picture.max' => 'The profile picture must not be greater than 5 MB.'
         ]);
 
-        //$user = User::findOrFail($request->user_id);
         $user = auth()->user();
         if ($request->profile_picture) {
             $file = $request->profile_picture;
@@ -468,7 +458,7 @@ class UserController extends Controller
         ]);
 
         // create or update user details
-        $user_detail = UserDetail::updateOrCreate([
+        $userDetail = UserDetail::updateOrCreate([
             'user_id'           =>  $user->id,
         ], [
             'description'       =>  $request->description,
@@ -477,7 +467,7 @@ class UserController extends Controller
 
         return ok(__('profile updated successfully!'), [
             'user'          =>  $user,
-            'user_detail'   =>  $user_detail
+            'user_detail'   =>  $userDetail
         ]);
     }
 
@@ -491,7 +481,6 @@ class UserController extends Controller
     public function contactsAndChannels(Request $request)
     {
         $this->validate($request, [
-            //'user_id'           =>  'required|exists:users,id',
             'email'             =>  'nullable|email',
             'phone_number'      =>  'required|min:12|numeric',
             'whatsapp_number'   =>  'nullable',
@@ -501,13 +490,12 @@ class UserController extends Controller
             'extra_channels'    =>  'nullable|array',
 
         ]);
-        //$user = User::findOrFail($request->user_id);
+
         $user = auth()->user();
         $extra_channels = serialize($request->input('extra_channels'));
 
         // create or update user details
-        $user_detail = UserDetail::updateOrCreate([
-            //'user_id'           => $request->user_id
+        $userDetail = UserDetail::updateOrCreate([
             'user_id'           => $user->id,
         ], [
             'email'             => $request->email,
@@ -520,7 +508,7 @@ class UserController extends Controller
         ]);
         return ok(__('contacts and channels updated successfully!'), [
             'user'          =>   $user,
-            'user_detail'   =>   $user_detail
+            'user_detail'   =>   $userDetail
         ]);
     }
 
@@ -530,16 +518,15 @@ class UserController extends Controller
      * @param  mixed $request
      * @return void
      */
-    public function userLocations(Request $request)
+    public function userLocations(Request $request) // TODO: "not use this api"
     {
         $this->validate($request, [
-            //'user_id'                   =>  'required|exists:users,id',
             'location'                  =>  'nullable|array',
             'location.*.address'        =>  'required',
             'location.*.country_code'   =>  'required|exists:countries,code',
             'location.*.city_id'        =>  'required|exists:cities,id',
         ]);
-        //$user = User::findOrFail($request->user_id);
+
         $user = auth()->user();
         // delete old location
         $user->userLocations()->delete();
@@ -547,7 +534,7 @@ class UserController extends Controller
         //create new location
         if (isset($request['location']) && count($request['location']) > 0) {
 
-            foreach ($request['location'] as $key => $location) {
+            foreach ($request['location'] as $location) {
 
                 $user->userLocations()->create([
                     'address'       => $location['address'],
@@ -565,16 +552,14 @@ class UserController extends Controller
      * @param  mixed $request
      * @return void
      */
-    public function userLanguages(Request $request)
+    public function userLanguages(Request $request) // TODO: "not use this api"
     {
         $this->validate($request, [
-            //"user_id"                       =>  'required|exists:users,id',
             "languages"                     =>  'nullable|array',
-            "languages.*.language_id"       =>  'nullable|exists:languages,id', //Todo : add validation
+            "languages.*.language_id"       =>  'nullable|exists:languages,id',
             "languages.*.proficiency_level" =>  'nullable|in:NP,PP,FP', // NP,PP,FP
         ]);
 
-        //$user = User::findOrFail($request->user_id);
         $user = auth()->user();
         // delete old languages
         $user->userLanguages()->delete();
@@ -582,10 +567,9 @@ class UserController extends Controller
         //create new languages
         if (isset($request['languages']) && count($request['languages']) > 0) {
 
-            foreach ($request['languages'] as $key => $language) {
+            foreach ($request['languages'] as $language) {
 
                 $user->userLanguages()->create([
-                    // 'user_id'               => $request->user_id,
                     'language_id'           => $language['language_id'],
                     'proficiency_level'     => $language['proficiency_level'],
                 ]);
@@ -600,24 +584,22 @@ class UserController extends Controller
      * @param  mixed $request
      * @return void
      */
-    public function userAreasOfExpertise(Request $request)
+    public function userAreasOfExpertise(Request $request) // TODO: "not use this api"
     {
         $this->validate($request, [
-            //"user_id"       =>  'required|exists:users,id',
             "expertises"    =>  'required|array',
         ]);
-        //$user = User::findOrFail($request->user_id);
+
         $user = auth()->user();
         // create or update user details
-        $user_detail = UserDetail::updateOrCreate([
-            //'user_id'       =>  $request->user_id
+        $userDetail = UserDetail::updateOrCreate([
             'user_id'         => $user->id,
         ], [
             'expertises'    =>  $request->expertises,
         ]);
         return ok(__(' areas of expertise updated successfully!'), [
             'user'          =>  $user,
-            'user_detail'   =>  $user_detail
+            'user_detail'   =>  $userDetail
         ]);
     }
 
@@ -627,17 +609,15 @@ class UserController extends Controller
      * @param  mixed $request
      * @return void
      */
-    public function userInterested(Request $request)
+    public function userInterested(Request $request) // TODO: "not use this api"
     {
         $this->validate($request, [
-            //"user_id"       =>  'required|exists:users,id',
             "interests"     =>  'required|array',
         ]);
-        //$user = User::findOrFail($request->user_id);
+
         $user = auth()->user();
         // create or update user details
-        $user_detail = UserDetail::updateOrCreate([
-            //'user_id'       =>  $request->user_id
+        $userDetail = UserDetail::updateOrCreate([
             'user_id'         => $user->id
         ], [
             'interests'     =>  $request->interests,
@@ -645,7 +625,7 @@ class UserController extends Controller
 
         return ok(__('interested updated successfully!'), [
             'user'          =>  $user,
-            'user_detail'   =>  $user_detail
+            'user_detail'   =>  $userDetail
         ]);
     }
 
@@ -655,24 +635,22 @@ class UserController extends Controller
      * @param  mixed $request
      * @return void
      */
-    public function userCertification(Request $request)
+    public function userCertification(Request $request) // TODO: not "use this api"
     {
         $this->validate($request, [
-            //"user_id"                                 =>  'required|exists:users,id',
             "certifications"                          =>  'nullable|array',
             "certifications.*.name"                   =>  'nullable|max:100',
             "certifications.*.issuing_organization"   =>  'nullable',
             "certifications.*.issue_date"             =>  'nullable|date_format:Y-m-d H:i:s',
         ]);
 
-        //$user = User::findOrFail($request->user_id);
         $user = auth()->user();
         // delete old certifications
         $user->userCertifications()->delete();
         //create new certifications
         if (isset($request['certifications']) && count($request['certifications']) > 0) {
 
-            foreach ($request['certifications'] as $key => $certification) {
+            foreach ($request['certifications'] as $certification) {
 
                 $user->userCertifications()->create([
                     //'user_id'               => $request->user_id,
@@ -701,7 +679,12 @@ class UserController extends Controller
         return ok(__('user view profile successfully!'), $user);
     }
 
-
+    /**
+     * get user details using email api
+     *
+     * @param  mixed $request
+     * @return void
+     */
     public function getDetails(Request $request)
     {
         $request->validate([
@@ -727,16 +710,26 @@ class UserController extends Controller
         }
         $success['module'] = $modules;
 
-        return ok(__('Signed in successfully!'), $success);
+        return ok(__('Get user details successfully'), $success);
     }
-    /* Profile completion criteria */
+
+    /**
+     * Profile completion criteria api
+     *
+     * @return void
+     */
     public function profileCompletionCriteria()
     {
-
         $percentage = profilePercentage();
         return ok(__('Profile completion criteria'), number_format($percentage, 2));
     }
-    /* Set first login time false  */
+
+    /**
+     * Set first login time false api
+     *
+     *
+     * @return void
+     */
     public function setFirstLogin()
     {
         $user = User::findOrFail(auth()->user()->id);
@@ -753,10 +746,9 @@ class UserController extends Controller
      * @param  mixed $request
      * @return void
      */
-
     public function addPreference(Request $request)
     {
-
+        //Validation
         $this->validate($request, [
             'quality_rating'        =>  'nullable',
             'industries'            =>  'nullable|array|exists:industries,id',
@@ -775,61 +767,61 @@ class UserController extends Controller
 
         $input['company_size'] = $request->input('company_size') ? serialize($request->input('company_size')) : null;
 
-        $ques = UserDetail::updateOrCreate(['user_id' => $request->user_id], $input);
+        $userDetail = UserDetail::updateOrCreate(['user_id' => $request->user_id], $input);
 
         if ($request->industries) {
             $companyPeople = [];
             $query = PreferenceIndustry::query();
-            foreach ($request->industries as $key => $value) {
+            foreach ($request->industries as $value) {
                 $companyPeople[] = [
                     'industry_id' => $value,
-                    'user_detail_id' => $ques->id
+                    'user_detail_id' => $userDetail->id
                 ];
             }
-            $query->where('user_detail_id', $ques->id)->delete();
+            $query->where('user_detail_id', $userDetail->id)->delete();
             $query->insert($companyPeople);
         } else {
             $query = PreferenceIndustry::query();
-            $query->where('user_detail_id', $ques->id)->delete();
+            $query->where('user_detail_id', $userDetail->id)->delete();
         }
 
         if ($request->interested_countries) {
             $companyPeople = [];
             $query = PreferenceCountry::query();
-            foreach ($request->interested_countries as $key => $value) {
+            foreach ($request->interested_countries as $value) {
                 $companyPeople[] = [
                     'country_id' => $value,
-                    'user_detail_id' => $ques->id
+                    'user_detail_id' => $userDetail->id
                 ];
             }
-            $query->where('user_detail_id', $ques->id)->delete();
+            $query->where('user_detail_id', $userDetail->id)->delete();
             $query->insert($companyPeople);
         } else {
             $query = PreferenceCountry::query();
-            $query->where('user_detail_id', $ques->id)->delete();
+            $query->where('user_detail_id', $userDetail->id)->delete();
         }
 
 
         if ($request->cases) {
             $companyPeople = [];
             $query = PreferenceAgent::query();
-            foreach ($request->cases as $key => $value) {
+            foreach ($request->cases as $value) {
                 $companyPeople[] = [
                     'agent_id' => $value,
-                    'user_detail_id' => $ques->id
+                    'user_detail_id' => $userDetail->id
                 ];
             }
-            $query->where('user_detail_id', $ques->id)->delete();
+            $query->where('user_detail_id', $userDetail->id)->delete();
             $query->insert($companyPeople);
         } else {
             $query = PreferenceAgent::query();
-            $query->where('user_detail_id', $ques->id)->delete();
+            $query->where('user_detail_id', $userDetail->id)->delete();
         }
 
 
         User::where('id', $request->user_id)->update(['onboarding_status' => 'YC']);
 
-        return ok(__('Your preferences have been successfully saved.'), $ques);
+        return ok(__('Your preferences have been successfully saved.'), $userDetail);
     }
 
     /**
@@ -838,10 +830,9 @@ class UserController extends Controller
      * @param  mixed $request
      * @return void
      */
-
     public function updatePreference(Request $request)
     {
-
+        //Validation
         $this->validate($request, [
             'quality_rating'        =>  'nullable',
             'industries'            =>  'nullable|array|exists:industries,id',
@@ -853,69 +844,69 @@ class UserController extends Controller
             'use_of_contact_data'   =>  'nullable',
             'user_id'               =>  'required|exists:users,id',
         ]);
-
-        $ques = UserDetail::where('user_id', $request->user_id)->first();
-
-        if (!$ques) {
-            return error(__('User Preference data not found.'), [], 'validation');
-        }
+        $userQuery     = UserDetail::query();
+        $industryQuery = PreferenceIndustry::query();
+        $countryQuery  = PreferenceCountry::query();
+        $agentQuery    = PreferenceAgent::query();
+        // Get existing user details
+        $userDetail = (clone $userQuery)->where('user_id', $request->user_id)->first();
 
         $input = $request->only('quality_rating', 'revenue', 'positions', 'use_of_contact_data');
 
         $input['company_size'] = $request->input('company_size') ? serialize($request->input('company_size')) : null;
-
-        $ques->update($input);
+        // If user details not exist then create details otherwise update info
+        if (!$userDetail) {
+            $input['user_id'] = $request->user_id;
+            $userDetail = (clone $userQuery)->create($input);
+            //return error(__('User Preference data not found.'), [], 'validation');
+        } else {
+            $userDetail->update($input);
+        }
 
         if ($request->industries) {
             $companyPeople = [];
-            $query = PreferenceIndustry::query();
-            foreach ($request->industries as $key => $value) {
+            foreach ($request->industries as $value) {
                 $companyPeople[] = [
                     'industry_id' => $value,
-                    'user_detail_id' => $ques->id
+                    'user_detail_id' => $userDetail->id
                 ];
             }
-            $query->where('user_detail_id', $ques->id)->delete();
-            $query->insert($companyPeople);
+            (clone $industryQuery)->where('user_detail_id', $userDetail->id)->delete();
+            (clone $industryQuery)->insert($companyPeople);
         } else {
-            $query = PreferenceIndustry::query();
-            $query->where('user_detail_id', $ques->id)->delete();
+            (clone $industryQuery)->where('user_detail_id', $userDetail->id)->delete();
         }
 
         if ($request->interested_countries) {
             $companyPeople = [];
-            $query = PreferenceCountry::query();
-            foreach ($request->interested_countries as $key => $value) {
+            foreach ($request->interested_countries as $value) {
                 $companyPeople[] = [
                     'country_id' => $value,
-                    'user_detail_id' => $ques->id
+                    'user_detail_id' => $userDetail->id
                 ];
             }
-            $query->where('user_detail_id', $ques->id)->delete();
-            $query->insert($companyPeople);
+            (clone $countryQuery)->where('user_detail_id', $userDetail->id)->delete();
+            (clone $countryQuery)->insert($companyPeople);
         } else {
-            $query = PreferenceCountry::query();
-            $query->where('user_detail_id', $ques->id)->delete();
+            (clone $countryQuery)->where('user_detail_id', $userDetail->id)->delete();
         }
 
 
         if ($request->cases) {
             $companyPeople = [];
-            $query = PreferenceAgent::query();
-            foreach ($request->cases as $key => $value) {
+            foreach ($request->cases as $value) {
                 $companyPeople[] = [
                     'agent_id' => $value,
-                    'user_detail_id' => $ques->id
+                    'user_detail_id' => $userDetail->id
                 ];
             }
-            $query->where('user_detail_id', $ques->id)->delete();
-            $query->insert($companyPeople);
+            (clone $agentQuery)->where('user_detail_id', $userDetail->id)->delete();
+            (clone $agentQuery)->insert($companyPeople);
         } else {
-            $query = PreferenceAgent::query();
-            $query->where('user_detail_id', $ques->id)->delete();
+            (clone $agentQuery)->where('user_detail_id', $userDetail->id)->delete();
         }
 
-        return ok(__('Your preferences have been successfully updated'), $ques);
+        return ok(__('Your preferences have been successfully updated'), $userDetail);
     }
 
     /**
@@ -925,14 +916,9 @@ class UserController extends Controller
      * @return void
      */
 
-    public function userPreference(Request $request)
+    public function userPreference()
     {
-
-        $this->validate($request, [
-            'user_id'   =>  'required|exists:users,id',
-        ]);
-
-        $user = UserDetail::with('preferenceIndustries.industry', 'preferenceCountries.country', 'preferenceAgents')->where('user_id', $request->user_id)->get();
+        $user = UserDetail::with('preferenceIndustries.industry', 'preferenceCountries.country', 'preferenceAgents')->where('user_id', auth()->user()->id)->first();
 
         if (!$user) {
             return error(__('Preference data not found.'), [], 'validation');
@@ -950,8 +936,8 @@ class UserController extends Controller
 
     public function listIndustry(Request $request)
     {
-        $regions = Industry::get(['id', 'name']);
-        return ok(__('Industry list!'), $regions);
+        $industries = Industry::get(['id', 'name']);
+        return ok(__('Industry list'), $industries);
     }
 
     /**
@@ -962,6 +948,7 @@ class UserController extends Controller
      */
     public function syncContactStatus(Request $request)
     {
+        //Validation
         $this->validate($request, [
             'sync_with_gmail'     => 'nullable|boolean',
             'sync_with_outlook'   => 'nullable|boolean',
@@ -982,5 +969,28 @@ class UserController extends Controller
         ]);
 
         return ok(__('Sync status updated successfully.'), $user);
+    }
+
+    /**
+     * get company and user Info api
+     *
+     * @param  mixed $id
+     * @return void
+     */
+    public function userCompanyProfilePicture($id)
+    {
+        // Get user with company info
+        $user = User::with('company:id,profile_picture')->find($id);
+
+        if (!$user) {
+            return error(__('This user does not exist!'), [], 'validation');
+        }
+
+        $data = [
+            'user_picture'    => $user->profile_picture,
+            'company_picture' => $user->company ? $user->company->profile_picture : null,
+        ];
+
+        return ok(__('Get user and company profile picture successfully!'), $data);
     }
 }

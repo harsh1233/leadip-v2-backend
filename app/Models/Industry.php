@@ -22,9 +22,9 @@ class Industry extends Model
 
     protected $primaryKey = 'id';
 
-    protected $keyType      = 'string';
+    protected $keyType    = 'string';
 
-    public $incrementing    = false;
+    public $incrementing  = false;
 
     public function preferenceIndustries()
     {

@@ -121,11 +121,11 @@ class User extends Authenticatable
     }
 
     /**
-     * User Detail
+     * Company Detail
      */
     public function companyDetail()
     {
-        return $this->hasOne(Company::class,'id','company_id');
+        return $this->hasOne(Company::class, 'id', 'company_id');
     }
 
     /**
@@ -176,17 +176,11 @@ class User extends Authenticatable
         return $this->hasOne(UserLocation::class);
     }
 
-
-
-     /**
-     * User Company
+    /**
+     * create user Full name
      *
-     * @return void
+     * @return string
      */
-    // public function companyDetail()
-    // {
-    //     return $this->belongsTo(Company::class,'company_id','id');
-    // }
     public function getFullNameAttribute() // notice that the attribute name is in CamelCase.
     {
         return $this->first_name . ' ' . $this->last_name;
@@ -194,7 +188,7 @@ class User extends Authenticatable
 
     /*Get Compny contacts */
     public function companyContacts(){
-        return $this->hasMany(CompanyContact::class,'created_by','id');
+        return $this->hasMany(CompanyContact::class, 'created_by', 'id');
     }
 
 }

@@ -10,152 +10,145 @@ use App\Models\City;
 use App\Models\Country;
 use Illuminate\Support\Facades\Validator;
 use Maatwebsite\Excel\Concerns\WithHeadingRow;
+use Maatwebsite\Excel\Concerns\SkipsEmptyRows;
 use Maatwebsite\Excel\Concerns\WithValidation;
 use Maatwebsite\Excel\Validators\ValidationException;
-use App\Http\Controllers\Functions;
 use App\Exceptions\CustomException;
 use Exception;
 use Illuminate\Validation\Rule;
 use App\Models\CompanyPeople;
-use Str;
+use Illuminate\Support\Str;
 
-class CompanyContactImport implements ToCollection, WithHeadingRow
+class CompanyContactImport implements ToCollection, SkipsEmptyRows, WithHeadingRow
+
 {
-    use Functions;
+    public $data;
+
     public function  __construct($data)
     {
         $this->data = $data;
     }
+
     /**
      * @param Collection $collection
      */
     public function collection(Collection $rows)
     {
-        $errorMessages = '';
-        $count = 0;
+        // check validation
+        companyImportValidation($rows);
+
+        $errorMessages = [];
+        $domains = [];
+        $rowsWithDomain = [];
         $importData = [];
-        foreach ($rows as $rowIndex => $row) {
+        $existDomains = [];
+        $companyContact = CompanyContact::query();
+        foreach ($rows as $rowIndex => $row)
+        {
+            // If row empty then skip row.
             if ($row->filter()->isNotEmpty()) {
-                if (empty($row['email']) || empty($row['phone_number']) || empty($row['role']) || empty($row['point_of_contact']) || empty($row['country']) || empty($row['city']) || empty($row['first_name']) || empty($row['last_name'])) {
-                    $errorMessages = '';
-                    $errorMessages .= 'Please verify that your file title is correct and all required fields are filled.';
-                    $count = $count + 1;
-                } else {
-                    $errorMessages = '';
-                    // validate 'Email' field
-                    $validator = Validator::make(['email' => $row['email']], [
-                        'email' => ['email', Rule::unique('contacts')->where(function ($query) {
-                            return $query->where('company_id', auth()->user()->company_id);
-                        })],
-                    ]);
-                    if ($validator->fails()) {
-                        continue;
-                        // $errorMessages .=  $validator->errors()->first('email');
-                        // $count = $count + 1;
-                    }
-                    // validate 'phone_number' field
-                    $validator = Validator::make(['phone_number' => $row['phone_number']], [
-                        'phone_number' => 'nullable',
-                    ]);
-                    if ($validator->fails()) {
-                        $errorMessages .=  $validator->errors()->first('phone_number');
-                        $count = $count + 1;
-                    }
-                    // validate 'country' field
-                    $validator = Validator::make(['country' => $row['country']], [
-                        'country' => 'exists:countries,name',
-                    ]);
-                    if ($validator->fails()) {
-                        $errorMessages .=  $validator->errors()->first('country');
-                        $count = $count + 1;
-                    }
-                    // validate 'city' field
-                    $validator = Validator::make(['city' => $row['city']], [
-                        'city' => 'exists:cities,name',
-                    ]);
-                    if ($validator->fails()) {
-                        $errorMessages .=  $validator->errors()->first('city');
-                        $count = $count + 1;
-                    }
-                    // contact row number with string
-                    $rowcount = 'In Row ' . ($rowIndex + 2) . ', ';
-                    $errorMessages =  $rowcount . $errorMessages;
-                }
-                // if there were no errors, return true to indicate success
-                if ($count == 0) {
+                $rowIndex += 2;
+
+                $emailDomain = substr($row['email'], strpos($row['email'], '@') + 1);
+                // Check company domain if domain in array then continue otherwise check unique domain validation
+                if (in_array($emailDomain, config('constants.ALLOWED_DOMAINS'))) {
                     continue;
+                }
+                // Find exist email domain
+                $existDomain = (clone $companyContact)->where('email', 'like', "%@{$emailDomain}")->where('sub_type', 'C')->where('company_id', auth()->user()->company_id)->exists();
+                if ($existDomain) {
+                    $existDomains[] = $emailDomain;
+                }
+                // Duplicate domain in sheet array create with line number
+                if (isset($domains[$emailDomain])) {
+                    $rowWithDomain = $rowsWithDomain[$emailDomain];
+                    $rowWithDomain[] = $rowIndex;
+                    $rowsWithDomain[$emailDomain] = $rowWithDomain;
                 } else {
-                    // throw an exception if there are any errors
-                    $this->throwError($errorMessages);
+                    $domains[$emailDomain] = true;
+                    $rowsWithDomain[$emailDomain] = [$rowIndex];
                 }
             }
         }
+
+        // In sheet get count of same domain company.
+        $duplicateDomains = array_filter($rowsWithDomain, function ($row) {
+            return count($row) > 1;
+        });
+
+        foreach ($duplicateDomains as $domain => $rows) {
+            $rowNumber = implode(',', $rows);
+            $errorMessages[] = "Duplicate email domain found {$domain} in rows {$rowNumber}. Please enter a unique domain for each company";
+            break;
+        }
+
+        // Throw error if company domain already exist in upload file.
+        if (is_array($errorMessages) && count($errorMessages) > 0)
+        {
+            $errorMessage = implode(' ', $errorMessages);
+            //Throw error message
+            throwError($errorMessage);
+        }
+
+        // Throw error if company domain already exist in database.
+        if (is_array($existDomains) && count($existDomains) > 0)
+        {
+            $existDomains = implode(',', $existDomains);
+            //Throw error message
+            throwError("This domain ({$existDomains}) already exist.");
+        }
+
         // process valid rows and save them to the database
         foreach ($rows as $row) {
             if ($row->filter()->isNotEmpty()) {
 
-                $validator = Validator::make(['email' => $row['email']], [
-                    'email' => ['email', Rule::unique('contacts')->where(function ($query) {
-                        return $query->where('company_id', auth()->user()->company_id);
-                    })],
-                ]);
-                if ($validator->fails()) {
+                $existContact = (clone $companyContact)->where('email', $row['email'])->where('company_id', auth()->user()->company_id)->first();
+                if ($existContact) {
                     continue;
                 }
-                $data = $this->data;
-                $val = trim($row['country']);
-                $country_code = Country::where('name', $val)->first();
-                $val = trim($row['city']);
-                $c = City::where('name', $val)->first();
-                $contact = CompanyContact::create([
-                    'company_id'    =>  auth()->user()->company_id,
-                    'type'    =>         $data['type'],
-                    'section'    =>  $data['section'],
-                    'sub_type'    =>   $data['sub_type'],
-                    'email'    => ($row['email'] ?: null),
-                    'phone_number'    => ($row['phone_number'] ?: null),
-                    'first_name'    => ($row['first_name']  ?: null),
-                    'last_name'    => ($row['last_name']  ?: null),
-                    'country_code'    => $country_code->code,
-                    'city_id'    => $c->id,
-                    'role'     => ($row['role'] ?: null),
-                    'point_of_contact'     => ($row['point_of_contact'] ?: null),
-                    'is_import'    => 1,
+
+                // Get country
+                $country = Country::where('name', trim($row['country']))->first();
+
+                // Get city
+                $city = City::where('name', trim($row['city']))->first();
+
+                if (isset($row['category']) && $row['category'] == 'Holder') {
+                    $category = 'H';
+                } else {
+                    $category = 'R';
+                }
+                //Create Contact
+                $contact = (clone $companyContact)->create([
+                    'company_id'      => auth()->user()->company_id,
+                    'type'            => $this->data['type'],
+                    'sub_type'        => $this->data['sub_type'],
+                    'category'        => $category,
+                    'company_name'    => $row['company_name'] ?? null,
+                    'email'           => $row['email'] ?? null,
+                    'phone_number'    => $row['phone_number'] ?? null,
+                    'country_code'    => $country->code ?? null,
+                    'city_id'         => $city->id ?? null,
+                    'is_import'       => 1,
+                    'is_private'      => $this->data['is_private'] ?? 0,
+                    'is_lost'         => $this->data['is_lost'] ?? 0,
                 ]);
+                // Store upload contacts in array
                 array_push($importData, $contact);
                 $slug = Str::slug($contact->id);
-                if ($data['type'] == 'G') {
-                    $fianlslug =   url(config('constants.CONTACT_SLAG_SERVER_URL')) . $slug;
-                } elseif ($data['type'] == 'P') {
-                    $fianlslug =  url(config('constants.PROSPECT_SLAG_SERVER_URL')) . $slug;
-                } else {
-                    $fianlslug =  url(config('constants.CLIENT_SLAG_SERVER_URL')) . $slug;
-                }
-                CompanyContact::whereId($contact->id)->update([
+                // Get Contact slag url
+                $fianlslug = contactSlugUrl($this->data['type'], $slug);
+                //Update slag url
+                $contact->update([
                     'slag' => $fianlslug
                 ]);
-                $query = CompanyContact::query();
-                $queryData = CompanyPeople::query();
-                $temp = $this->data;
-                if ($temp['sub_type'] == 'P') {
-                    $email  = $row['email'];
-                    $domain = substr($email, strpos($email, '@') + 1);
-                    if ($domain != 'hotmail.com' && $domain != 'yahoo.com' && $domain != 'gmail.com' && $domain != 'icloud.com' && $domain != 'outlook.com') {
-                        $compnyId = (clone $query)->where('email', 'like', "%@$domain")->where('sub_type', 'C')->where('company_id', auth()->user()->company_id)->first();
-                        if ($compnyId) {
-                            $queryData->create(['company_id' => $compnyId->id, 'people_id' => $contact->id]);
-                            $query->where('id', $contact->id)->update(['company_name' => $compnyId->company_name]);
-                        }
-                    }
-                }
+                // Company People Mapping
+                contactCompanyPeopleMap($contact);
             }
         }
         /* Sent notification to the team member */
-        $count    = $rows->count();
-        $temp     = $this->data;
-        $type     = $temp['type'];
-        $sub_type = $temp['sub_type'];
-        sentMultipleNotification($type, $sub_type, $count);
-        session()->put('peopleContact', $importData);
+        sentMultipleNotification($this->data['type'], $this->data['sub_type'], $rows->count());
+        // Store upload contacts in session
+        session()->put('contact', $importData);
     }
 }

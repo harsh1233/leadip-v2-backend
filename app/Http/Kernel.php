@@ -67,6 +67,6 @@ class Kernel extends HttpKernel
         'verified' => \Illuminate\Auth\Middleware\EnsureEmailIsVerified::class,
         'role' => CheckRole::class,
         'permission' => \App\Http\Middleware\CheckPermission::class,
-        'auth-sanctum-custome' => \App\Http\Middleware\CheckAuth::class,
+        'auth-sanctum-custom' => \App\Http\Middleware\CheckAuth::class,
     ];
 }

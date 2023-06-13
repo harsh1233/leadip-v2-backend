@@ -18,21 +18,18 @@ class CheckPermission
      */
     public function handle(Request $request, Closure $next,$module_code,$permission)
     {
-        
         $modules = explode("|", $module_code);
         $query   = ModulePermissionRole::query();
         /* Check more than one module */
-        if(count($modules) > 1){
-            $check      = (clone $query)->whereIn('module_code',$modules)->where('permission_code',$permission)->where('role_id',auth()->user()->role_id)->where('has_access',1)->first();   
-        }else{
+        if (count($modules) > 1) {
+            $check = (clone $query)->whereIn('module_code', $modules)->where('permission_code', $permission)->where('role_id', auth()->user()->role_id)->where('has_access', 1)->first();
+        } else {
             /*on single module */
-            $check      = (clone $query)->where('module_code',$module_code)->where('permission_code',$permission)->where('role_id',auth()->user()->role_id)->where('has_access',1)->first();
+            $check = (clone $query)->where('module_code', $module_code)->where('permission_code', $permission)->where('role_id', auth()->user()->role_id)->where('has_access', 1)->first();
         }
-        if($check){
+        if ($check) {
             return $next($request);
         }
-        else{
-            return error(__("Sorry, you don't have permission to ".$permission), [], 'forbidden');
-        }
+        return error(__("Sorry, you don't have permission to " . $permission), [], 'forbidden');
     }
 }

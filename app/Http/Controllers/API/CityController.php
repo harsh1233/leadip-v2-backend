@@ -9,7 +9,7 @@ use Illuminate\Support\Str;
 
 class CityController extends Controller
 {
-    
+
     /**
      * get City api
      *
@@ -24,26 +24,22 @@ class CityController extends Controller
 
         $query = City::query();
 
+        // Country wise filter
         if($request->country_code){
-            $query->where('country_code',$request->country_code);
+            $query->where('country_code', $request->country_code);
         }
-        
+
         $query->select('id','country_code','name');
 
-        $count = $query->count();
-        if($request->page && $request->perPage){
-            $page    = $request->page;
-            $perPage = $request->perPage;
-            $query->skip($perPage * ($page - 1))->take($perPage);
-        }
+        /* For Pagination and shorting filter*/
+        $result = filterSortPagination($query);
+        $cities = $result['query']->get();
+        $count  = $result['count'];
 
-        $cities = $query->get();
-
-        return ok(__('Cities list'),[ 
+        return ok(__('Cities List'),[
             'cities' => $cities,
             'count' => $count,
         ]);
-
     }
 
 }

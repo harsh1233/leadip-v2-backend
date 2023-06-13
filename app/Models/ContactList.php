@@ -43,13 +43,13 @@ class ContactList extends Model
     }
 
     public function users(){
-        return $this->belongsTo(User::class,'created_by','id');
+        return $this->belongsTo(User::class, 'created_by', 'id');
     }
 
     /*Please change here Contact table instaed user */
     public function listContact(){
         //return $this->belongsToMany(Contact::class,'list_contacts','list_id','contact_id')->with('type');
-        return $this->belongsToMany(CompanyContact::class,'list_contacts','list_id','contact_id')->with('type');
+        return $this->belongsToMany(CompanyContact::class, 'list_contacts', 'list_id', 'contact_id')->with('type');
     }
     /* Set assing by name */
     // public function getAssignByAttribute(){
@@ -58,7 +58,7 @@ class ContactList extends Model
     //     }
     // }
     /*Type Accessor*/
-    	
+
     // public function getTypeAttribute($value){
     //     switch($value){
     //         case 'L':
@@ -70,10 +70,10 @@ class ContactList extends Model
     //         case 'LC':
     //             return __('Lost Contacts');
     //         default:
-    //             return $value; 
+    //             return $value;
     //     }
     // }
-    
+
     /*SubType Accessor */
     // public function getSubTypeAttribute($value)
     // {
@@ -92,18 +92,17 @@ class ContactList extends Model
     /* Get list type full name */
     public function getlistTypeAttribute(){
         $value = $this->type;
-            switch($value){
-                case 'P':
-                    return __('Prospect');
-                case 'CL':
-                    return __('Custom List');
-                case 'C':
-                    return __('Client');
-                case 'LC':
-                    return __('Lost Contacts');
-                default:
-                    return $value; 
+        switch($value){
+            case 'P':
+                return __('Prospect');
+            case 'CL':
+                return __('Custom List');
+            case 'C':
+                return __('Client');
+            case 'LC':
+                return __('Lost Contacts');
+            default:
+                return $value;
+        }
     }
-}
-
 }

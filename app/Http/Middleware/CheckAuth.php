@@ -21,38 +21,20 @@ class CheckAuth
      */
     public function handle(Request $request, Closure $next)
     {
-        $bearer = $request->bearerToken();
-        if($bearer)
+        if($request->bearerToken())
         {
-            //$tokenId = explode('|', $bearer);
-            $token = PersonalAccessToken::findToken($bearer);
-            if($token)
-            {
+            $token = PersonalAccessToken::findToken($request->bearerToken());
+            if ($token) {
                 $finduser = User::where('id', $token->tokenable_id)->first();
-                if($finduser)
-                {
-                    if (!Auth::check())
-                    {
+                if ($finduser) {
+                    if (!Auth::check()) {
                         Auth::login($finduser);
                     }
-
-                    // Add user in request
-                    // $request->merge(['user' => $finduser]);
-                    // //add this
-                    // $request->setUserResolver(function () use ($finduser) {
-                    //     return $finduser;
-                    // });
                     return $next($request);
                 }
-                else
-                {
-                    return error(__('You have been logged out due to change in password. Please login again with the new password.'), [], 'unauthenticated');
-                }
-            }
-            else
-            {
                 return error(__('You have been logged out due to change in password. Please login again with the new password.'), [], 'unauthenticated');
             }
+            return error(__('You have been logged out due to change in password. Please login again with the new password.'), [], 'unauthenticated');
         }
 
         if (!$request->expectsJson()) {

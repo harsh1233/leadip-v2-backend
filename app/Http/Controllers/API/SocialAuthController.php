@@ -14,6 +14,10 @@ use Laravel\Socialite\Facades\Socialite;
 use App\Models\Module;
 use App\Models\CompanyContact;
 use Illuminate\Http\Request;
+use App\Models\CompanyPeople;
+use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 
 class SocialAuthController extends Controller
 {
@@ -58,9 +62,6 @@ class SocialAuthController extends Controller
         } else {
             return Socialite::driver($provider)->redirect();
         }
-        // $url = Socialite::driver('google')->stateless()->redirect()->getTargetUrl();
-        //return Socialite::driver($provider)->redirect();
-        // return ok(__('Link fetched successfully'), $url);
     }
 
     /**
@@ -78,35 +79,27 @@ class SocialAuthController extends Controller
 
         $url = env('WEBAPP_URL');
         header('Access-Control-Allow-Origin: *');
+        //Get Message Prefix
+        $preFix = prefix($mainType);
+        $successMessage = $preFix . " synced successfully";
+        $errorMessage   = $preFix . " syncing failed, please try again!";
         // Check sync request url if request from on boarding then redirect to this page otherwise redirect to contact page
         if (!empty($isOnboarding) && $isOnboarding == 'true') {
             $tabId = '';
             if ($mainType == 'P') {
-                $successMessage = "Prospect(s) synced successfully";
-                $errorMessage = "Prospect(s) syncing failed, please try again!";
                 $syncUrl = config('constants.SYNC_PROSPECT_URL');
             } elseif ($mainType == 'CL') {
-                $successMessage = "Client(s) synced successfully";
-                $errorMessage = "Client(s) syncing failed, please try again!";
                 $syncUrl = config('constants.SYNC_CLIENT_URL');
             } else {
-                $successMessage = "Contact(s) synced successfully";
-                $errorMessage = "Contact(s) syncing failed, please try again!";
                 $syncUrl = config('constants.ON_BOARDING_SYNC_WEB_URL');
             }
         } else {
             $tabId = 'tabId=5&';
             if ($mainType == 'P') {
-                $successMessage = "Prospect(s) synced successfully";
-                $errorMessage = "Prospect(s) syncing failed, please try again!";
                 $syncUrl = config('constants.SYNC_PROSPECT_URL');
             } elseif ($mainType == 'CL') {
-                $successMessage = "Client(s) synced successfully";
-                $errorMessage = "Client(s) syncing failed, please try again!";
                 $syncUrl = config('constants.SYNC_CLIENT_URL');
             } else {
-                $successMessage = "Contact(s) synced successfully";
-                $errorMessage = "Contact(s) syncing failed, please try again!";
                 $syncUrl = config('constants.SYNC_WEB_URL');
             }
         }
@@ -168,10 +161,8 @@ class SocialAuthController extends Controller
                     if ($full_name == null) {
                         return redirect()->away($url . "signin?auth_error=The email has already been taken");
                     }
-                    // if($social_media->deleted_at != null){
-                    //     return redirect()->away($url."signin?auth_error=The email has already been taken");
-                    // }
-                    return redirect()->away($url . "signin?auth_error=You have already signed up through $full_name with this email, please try signing  up through $full_name ");
+
+                    return redirect()->away($url . "signin?auth_error=You have already signed up through {$full_name} with this email, please try signing  up through {$full_name}");
                 }
                 if ($provider == 'google') {
                     $social_type = 'G';
@@ -189,33 +180,26 @@ class SocialAuthController extends Controller
                     $first_name = $socialite_user->first_name;
                     $last_name  = $socialite_user->last_name;
                 }
+                //Create User
                 $user = User::create([
                     'first_name'        => $first_name ?? '',
                     'last_name'         => $last_name ?? '',
                     'social_id'         => $socialite_user->id,
                     'email'             => $socialite_user->email,
-                    'role_id'           => Role::where('name', 'Super Admin')->first()->id,
+                    'role_id'           => Role::where('name', config('constants.super_admin'))->first()->id,
                     'social_type'       => $social_type,
                     'onboarding_status' => 'YP',
                     'is_email_verified' => Carbon::now()
                 ]);
+                //Create auth token
                 $data = $this->getLoggedIn($user->id, $socialite_user->id);
             }
             // log them in
-            //return "success";
             return redirect()->away($url . 'signin?email=' . $data['user']->email . '&token=' . $data['token']);
         } catch (Exception $e) {
-            // return error('Error', $e->getMessage());
             return redirect()->away($url . 'signin?auth_error=' . $e->getMessage());
         }
     }
-
-    /**
-     * Open facebook login page
-     *
-     * @return void
-     */
-
 
     /**
      * Get Users basic data
@@ -224,8 +208,9 @@ class SocialAuthController extends Controller
     {
         if (Auth::loginUsingId(['id' => $user_id])) {
             $user = Auth::user()->load('company:id,name');
-            $success['token'] =  $user->createToken('auth-token')->plainTextToken;
-            $success['user']  =  $user;
+            $success['token']      =  $user->createToken('auth-token')->plainTextToken;
+            $success['user']       =  $user;
+            $success['social_id']  =  $social_id;
             return $success;
         }
     }
@@ -257,17 +242,16 @@ class SocialAuthController extends Controller
 
             $response = curl_exec($ch);
             if (curl_errno($ch)) {
-                \Log::info(['google_sync_error' => $ch]);
+                Log::info(['google_sync_error' => $ch]);
                 $success['success'] = false;
                 $success['message'] = $ch;
                 return $success;
             }
             curl_close($ch);
-            $response = $this->createMycontacts($socialite_user, $mainType, $authId, json_decode($response));
-            return $response;
+            return $this->createMycontacts($socialite_user, $mainType, $authId, json_decode($response));
         } catch (\Exception $e) {
-            \Log::info(['google_sync_error' => $e->getMessage()]);
-            \Log::info(['google_sync_error_line' => $e->getLine()]);
+            Log::info(['google_sync_error' => $e->getMessage()]);
+            Log::info(['google_sync_error_line' => $e->getLine()]);
             $success['success'] = false;
             $success['message'] = $e->getMessage();
             return $success;
@@ -282,7 +266,7 @@ class SocialAuthController extends Controller
         $user = User::where('id', $authId)->first();
 
         if ($user && isset($contacts->connections)) {
-            Auth::login($user);
+            //Auth::login($user);
             foreach ($contacts->connections as $contact) {
                 $email = $social_id = $organization = $company_name = $profile_picture = $occupation = $first_name = $last_name = $phone_number = "";
                 $country_code = null;
@@ -290,9 +274,13 @@ class SocialAuthController extends Controller
                 if (isset($contact->emailAddresses)) {
                     foreach ($contact->emailAddresses as $emailAddress) {
                         if (isset($emailAddress->metadata->primary)) {
-                            $email = $emailAddress->value ?? null;
+                            if (empty($email)) {
+                                $email = $emailAddress->value ?? null;
+                            }
                         } else {
-                            $email = $emailAddress->value ?? null;
+                            if (empty($email)) {
+                                $email = $emailAddress->value ?? null;
+                            }
                         }
                     }
                 }
@@ -302,18 +290,30 @@ class SocialAuthController extends Controller
                     foreach ($contact->organizations as $organization) {
                         if (isset($organization->metadata->primary)) {
                             if (isset($organization->type) && $organization->type == 'work') {
-                                $company_name = $organization->name ?? null;
+                                if (empty($company_name)) {
+                                    $company_name = $organization->name ?? null;
+                                }
                             } else {
-                                $company_name = $organization->name ?? null;
+                                if (empty($company_name)) {
+                                    $company_name = $organization->name ?? null;
+                                }
                             }
-                            $organization = $organization->title ?? null;
+                            if (empty($organization)) {
+                                $organization = $organization->title ?? null;
+                            }
                         } else {
                             if (isset($organization->type) && $organization->type == 'work') {
-                                $company_name = $organization->name ?? null;
+                                if (empty($company_name)) {
+                                    $company_name = $organization->name ?? null;
+                                }
                             } else {
-                                $company_name = $organization->name ?? null;
+                                if (empty($company_name)) {
+                                    $company_name = $organization->name ?? null;
+                                }
                             }
-                            $organization = $organization->title ?? null;
+                            if (empty($organization)) {
+                                $organization = $organization->title ?? null;
+                            }
                         }
                     }
                 }
@@ -322,9 +322,13 @@ class SocialAuthController extends Controller
                 if (isset($contact->occupations)) {
                     foreach ($contact->occupations as $occupation) {
                         if (isset($occupation->metadata->primary)) {
-                            $occupation = $occupation->value ?? null;
+                            if (empty($occupation)) {
+                                $occupation = $occupation->value ?? null;
+                            }
                         } else {
-                            $occupation = $occupation->value ?? null;
+                            if (empty($occupation)) {
+                                $occupation = $occupation->value ?? null;
+                            }
                         }
                     }
                 }
@@ -333,11 +337,19 @@ class SocialAuthController extends Controller
                 if (isset($contact->names)) {
                     foreach ($contact->names as $name) {
                         if (isset($name->metadata->primary)) {
-                            $first_name = $name->givenName ?? null;
-                            $last_name = $name->familyName ?? null;
+                            if (empty($first_name)) {
+                                $first_name = $name->givenName ?? null;
+                            }
+                            if (empty($last_name)) {
+                                $last_name = $name->familyName ?? null;
+                            }
                         } else {
-                            $first_name = $name->givenName ?? null;
-                            $last_name = $name->familyName ?? null;
+                            if (empty($first_name)) {
+                                $first_name = $name->givenName ?? null;
+                            }
+                            if (empty($last_name)) {
+                                $last_name = $name->familyName ?? null;
+                            }
                         }
                     }
                 }
@@ -346,9 +358,13 @@ class SocialAuthController extends Controller
                 if (isset($contact->phoneNumbers)) {
                     foreach ($contact->phoneNumbers as $phoneNumber) {
                         if (isset($phoneNumber->metadata->primary)) {
-                            $phone_number = $phoneNumber->value ?? null;
+                            if (empty($phone_number)) {
+                                $phone_number = $phoneNumber->value ?? null;
+                            }
                         } else {
-                            $phone_number = $phoneNumber->value ?? null;
+                            if (empty($phone_number)) {
+                                $phone_number = $phoneNumber->value ?? null;
+                            }
                         }
                     }
                 }
@@ -357,9 +373,13 @@ class SocialAuthController extends Controller
                 if (isset($contact->photos)) {
                     foreach ($contact->photos as $photo) {
                         if (isset($photo->metadata->primary)) {
-                            $profile_picture = $photo->url ?? null;
+                            if (empty($profile_picture)) {
+                                $profile_picture = $photo->url ?? null;
+                            }
                         } else {
-                            $profile_picture = $photo->url ?? null;
+                            if (empty($profile_picture)) {
+                                $profile_picture = $photo->url ?? null;
+                            }
                         }
                     }
                 }
@@ -370,9 +390,13 @@ class SocialAuthController extends Controller
                     if (isset($metadata->sources)) {
                         foreach ($metadata->sources as $source) {
                             if (isset($source->type) && $source->type == 'PROFILE') {
-                                $social_id = $source->id ?? null;
+                                if (empty($social_id)) {
+                                    $social_id = $source->id ?? null;
+                                }
                             } else {
-                                $social_id = $source->id ?? null;
+                                if (empty($social_id)) {
+                                    $social_id = $source->id ?? null;
+                                }
                             }
                         }
                     }
@@ -382,19 +406,24 @@ class SocialAuthController extends Controller
                 if (isset($contact->addresses)) {
                     foreach ($contact->addresses as $address) {
                         if (isset($address->metadata->primary)) {
-                            $country_code = $address->countryCode ?? null;
+                            if (empty($country_code)) {
+                                $country_code = $address->countryCode ?? null;
+                            }
                         } else {
-                            $country_code = $address->countryCode ?? null;
+                            if (empty($country_code)) {
+                                $country_code = $address->countryCode ?? null;
+                            }
                         }
                     }
                 }
 
                 if ($email) {
+                    $contactQuery = CompanyContact::query();
                     // get exist contact
-                    $exist_contact = CompanyContact::withTrashed()->where('email', $email)->where('created_by', $user->id)->first();
+                    $exist_contact = (clone $contactQuery)->withTrashed()->where('email', $email)->where('created_by', $user->id)->first();
                     if ($exist_contact) {
                         // Update Contact
-                        $exist_contact->update([
+                        DB::table('contacts')->where('id', $exist_contact->id)->update([
                             'profile_picture'          => $exist_contact->profile_picture ?? $profile_picture,
                             'areas_of_expertise'       => $exist_contact->areas_of_expertise ?? $occupation,
                             'company_name'             => $exist_contact->company_name ?? $company_name,
@@ -406,10 +435,24 @@ class SocialAuthController extends Controller
                             'country_code'             => $exist_contact->country_code ?? $country_code,
                             'updated_by'               => $user->id,
                             'priority'                 => $exist_contact->priority ?? 'L',
+                            'updated_at'               => \Carbon\Carbon::now(),
                         ]);
+                        // If contact slag is empty then update
+                        if(empty($exist_contact->slag))
+                        {
+                            $slug = Str::slug($exist_contact->id);
+                            // Get Contact slag url
+                            $fianlslug = contactSlugUrl($exist_contact->type, $slug);
+                            //Update slag url
+                            $exist_contact->update([
+                                'slag' => $fianlslug
+                            ]);
+                        }
                     } else {
-                        // Create contact
-                        CompanyContact::create([
+                        $contactId = Str::uuid();
+                        // Create Contact
+                        (clone $contactQuery)->insert([
+                            'id'                       => $contactId,
                             'email'                    => $email,
                             'profile_picture'          => $profile_picture,
                             'areas_of_expertise'       => $occupation,
@@ -425,8 +468,23 @@ class SocialAuthController extends Controller
                             'type'                     => $mainType ?? 'G',
                             'created_by'               => $user->id,
                             'priority'                 => 'L',
+                            'created_at'               => \Carbon\Carbon::now(),
                         ]);
-
+                        // Get contact
+                        $contact = (clone $contactQuery)->where('id', $contactId)->first();
+                        if($contact)
+                        {
+                            // Company People Mapping
+                            contactCompanyPeopleMap($contact);
+                            // Create contact slag and update
+                            $slug = Str::slug($contact->id);
+                            // Get Contact slag url
+                            $fianlslug = contactSlugUrl($mainType, $slug);
+                            //Update slag url
+                            $contact->update([
+                                'slag' => $fianlslug
+                            ]);
+                        }
                         // Update Google sync count
                         if ($mainType == 'P') {
                             $user->increment('prospect_google_sync_count');

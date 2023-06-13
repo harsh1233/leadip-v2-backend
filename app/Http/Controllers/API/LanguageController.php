@@ -17,7 +17,8 @@ class LanguageController extends Controller
      */
     public function list(Request $request)
     {
+        // Get All Languages
         $languages = Language::get();
-        return ok(__('Language list successfully!'),$languages);
+        return ok(__('Language list successfully!'), $languages);
     }
 }

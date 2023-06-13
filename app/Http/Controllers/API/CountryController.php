@@ -16,8 +16,8 @@ class CountryController extends Controller
      */
     public function list(Request $request)
     {
+        // Get country code and name
         $countries = Country::get(['code','name']);
-        return ok(__('Country list successfully!'),$countries);
-
+        return ok(__('Country list successfully!'), $countries);
     }
 }

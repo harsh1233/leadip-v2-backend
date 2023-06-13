@@ -13,6 +13,9 @@ use Microsoft\Graph\Model;
 use App\Models\CompanyContact;
 use App\Models\User;
 use Illuminate\Support\Str;
+use App\Models\CompanyPeople;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 
 class OutlookController extends Controller
 {
@@ -62,34 +65,26 @@ class OutlookController extends Controller
         $mainType     = Session::pull('mainType');
         $authId       = Session::pull('AuthId');
         $oauthState   = Session::pull('outlookOauthState');
+        //Get Message Prefix
+        $preFix = prefix($mainType);
+        $successMessage = $preFix . " synced successfully";
+        $errorMessage   = $preFix . " syncing failed, please try again!";
         if (!empty($isOnboarding) && $isOnboarding == 'true') {
             $tabId = '';
             if ($mainType == 'P') {
-                $successMessage = "Prospect(s) synced successfully";
-                $errorMessage = "Prospect(s) syncing failed, please try again!";
                 $syncUrl = config('constants.SYNC_PROSPECT_URL');
             } elseif ($mainType == 'CL') {
-                $successMessage = "Client(s) synced successfully";
-                $errorMessage = "Client(s) syncing failed, please try again!";
                 $syncUrl = config('constants.SYNC_CLIENT_URL');
             } else {
-                $successMessage = "Contact(s) synced successfully";
-                $errorMessage = "Contact(s) syncing failed, please try again!";
                 $syncUrl = config('constants.ON_BOARDING_SYNC_WEB_URL');
             }
         } else {
             $tabId = 'tabId=5&';
             if ($mainType == 'P') {
-                $successMessage = "Prospect(s) synced successfully";
-                $errorMessage = "Prospect(s) syncing failed, please try again!";
                 $syncUrl = config('constants.SYNC_PROSPECT_URL');
             } elseif ($mainType == 'CL') {
-                $successMessage = "Client(s) synced successfully";
-                $errorMessage = "Client(s) syncing failed, please try again!";
                 $syncUrl = config('constants.SYNC_CLIENT_URL');
             } else {
-                $successMessage = "Contact(s) synced successfully";
-                $errorMessage = "Contact(s) syncing failed, please try again!";
                 $syncUrl = config('constants.SYNC_WEB_URL');
             }
         }
@@ -128,17 +123,9 @@ class OutlookController extends Controller
                 if($accessToken)
                 {
                     $token = $accessToken->getToken();
-                    // $graph = new Graph();
-                    // $graph->setAccessToken($accessToken->getToken());
-
-                    // Get User info from outlook
-                    // $user = $graph->createRequest('GET', '/me?$select=displayName,mail,mailboxSettings,userPrincipalName,emailAddresses,mobilePhone')
-                    //     ->setReturnType(Model\User::class)
-                    //     ->execute();
-                    // $user = json_decode(json_encode($user));
-
+                    $outlookController = new OutlookController();
                     // get my contacts from outlook using api
-                    $response = $this->getOutllokContacts($token, $mainType, $authId, 1);
+                    $response = $outlookController->outllokContacts($token, $mainType, $authId, 1);
                     if (isset($response['success']) && $response['success']) {
                         return redirect()->away($syncUrl . '?' . $tabId . 'sync=true&message=' . $successMessage);
                     } else {
@@ -150,10 +137,10 @@ class OutlookController extends Controller
                     return redirect()->away($syncUrl . '?' . $tabId . 'sync=false&message=' . $errorMessage);
                 }
             } catch (\League\OAuth2\Client\Provider\Exception\IdentityProviderException $e) {
-                \Log::info(['outlook IdentityProviderException error' => $e->getMessage()]);
+                Log::info(['outlook IdentityProviderException error' => $e->getMessage()]);
                 return redirect()->away($syncUrl . '?' . $tabId . 'sync=false&message=' . $errorMessage);
             } catch (\Exception $e) {
-                \Log::info(['outlook Exception error' => $e->getMessage()]);
+                Log::info(['outlook Exception error' => $e->getMessage()]);
                 return redirect()->away($syncUrl . '?' . $tabId . 'sync=false&message=' . $errorMessage);
             }
         }
@@ -166,7 +153,7 @@ class OutlookController extends Controller
      *
      * @return void
      */
-    public function getOutllokContacts($accessToken, $mainType, $authId, $page = 1)
+    public function outllokContacts($accessToken, $mainType, $authId, $page = 1)
     {
         try {
             $perPage = 50;
@@ -181,7 +168,8 @@ class OutlookController extends Controller
             // store contacts in database
             if ($contacts) {
                 $contacts = json_decode(json_encode($contacts));
-                $response = $this->createOutlookContacts($accessToken, $contacts, $mainType, $authId, $page);
+                $outlookController = new OutlookController();
+                $response = $outlookController->createOutlookContacts($accessToken, $contacts, $mainType, $authId, $page);
             } else {
                 $response['success'] = true;
                 $response['message'] = "Contacts synced successfully";
@@ -189,8 +177,8 @@ class OutlookController extends Controller
 
             return $response;
         } catch (\Exception $e) {
-            \Log::info(['outlook_sync_error' => $e->getMessage()]);
-            \Log::info(['outlook_sync_error_line' => $e->getLine()]);
+            Log::info(['outlook_sync_error' => $e->getMessage()]);
+            Log::info(['outlook_sync_error_line' => $e->getLine()]);
             $success['success'] = false;
             $success['message'] = $e->getMessage();
             return $success;
@@ -207,24 +195,26 @@ class OutlookController extends Controller
         $user = User::where('id', $authId)->first();
 
         if ($user && $contacts) {
-            //Auth::login($user);
             foreach ($contacts as $contact) {
                 $email = $profile_picture = "";
                 // Get Primary Email Address
                 if (isset($contact->emailAddresses)) {
                     foreach ($contact->emailAddresses as $emailAddress) {
                         if (isset($emailAddress->address)) {
-                            $email = $emailAddress->address;
+                            if (empty($email)) {
+                                $email = $emailAddress->address;
+                            }
                         }
                     }
                 }
                 if ($email) {
+                    $contactQuery = CompanyContact::query();
                     // get exist contact
-                    $exist_contact = CompanyContact::withTrashed()->where('email', $email)->where('created_by', $user->id)->first();
+                    $exist_contact = (clone $contactQuery)->withTrashed()->where('email', $email)->where('created_by', $user->id)->first();
 
                     if ($exist_contact) {
                         // Update Contact
-                        \DB::table('contacts')->where('id', $exist_contact->id)
+                        DB::table('contacts')->where('id', $exist_contact->id)
                             ->update([
                                 'profile_picture'          => $exist_contact->profile_picture ?? $profile_picture,
                                 'areas_of_expertise'       => $exist_contact->areas_of_expertise ?? $contact->profession,
@@ -232,27 +222,27 @@ class OutlookController extends Controller
                                 'phone_number'             => $exist_contact->phone_number ?? str_replace(" ", "", $contact->mobilePhone),
                                 'first_name'               => $exist_contact->first_name ?? $contact->givenName,
                                 'last_name'                => $exist_contact->last_name ?? $contact->surname,
-                                'company_id'               =>  $exist_contact->company_id ?? $user->company_id,
-                                'sub_type'                 => 'P',
+                                'company_id'               => $exist_contact->company_id ?? $user->company_id,
+                                'sub_type'                 => 'P', // P=People
                                 'updated_by'               => $user->id,
                                 'updated_at'               => \Carbon\Carbon::now(),
-                                'priority'                 => $exist_contact->priority ?? 'L',
+                                'priority'                 => $exist_contact->priority ?? 'L', // L=Low
                             ]);
-                        // $exist_contact->update([
-                        //     'profile_picture'          => $exist_contact->profile_picture ?? $profile_picture,
-                        //     'areas_of_expertise'       => $exist_contact->areas_of_expertise ?? $contact->profession,
-                        //     'company_name'             => $exist_contact->company_name ?? $contact->companyName,
-                        //     'phone_number'             => $exist_contact->phone_number ?? str_replace(" ", "",$contact->mobilePhone),
-                        //     'first_name'               => $exist_contact->first_name ?? $contact->givenName,
-                        //     'last_name'                => $exist_contact->last_name ?? $contact->surname,
-                        //     'company_id'               =>  $exist_contact->company_id ?? $user->company_id,
-                        //     'sub_type'                 => 'P',
-                        //     'updated_by'               => $user->id,
-                        // ]);
+                        // If contact slag is empty then update
+                        if(empty($exist_contact->slag))
+                        {
+                            $slug = Str::slug($exist_contact->id);
+                            // Get Contact slag url
+                            $fianlslug = contactSlugUrl($exist_contact->type, $slug);
+                            $exist_contact->update([
+                                'slag' => $fianlslug
+                            ]);
+                        }
                     } else {
+                        $contactId = Str::uuid();
                         // Create Contact
-                        CompanyContact::insert([
-                            'id'                       => Str::uuid(),
+                        (clone $contactQuery)->insert([
+                            'id'                       => $contactId,
                             'email'                    => $email,
                             'profile_picture'          => $profile_picture ?? null,
                             'areas_of_expertise'       => $contact->profession ?? null,
@@ -263,13 +253,27 @@ class OutlookController extends Controller
                             'first_name'               => $contact->givenName ?? null,
                             'last_name'                => $contact->surname,
                             'company_id'               => $user->company_id,
-                            'sub_type'                 => 'P',
-                            'type'                     => $mainType ?? 'G',
+                            'sub_type'                 => 'P', // P=People
+                            'type'                     => $mainType ?? 'G', // G=General
                             'created_by'               => $user->id,
                             'created_at'               => \Carbon\Carbon::now(),
-                            'priority'                 => 'L',
+                            'priority'                 => 'L', // L=Low
                         ]);
-
+                        // Get contact
+                        $contact = (clone $contactQuery)->where('id', $contactId)->first();
+                        if($contact)
+                        {
+                            // Contact people mapping
+                            contactCompanyPeopleMap($contact);
+                            // Create contact slag and update
+                            $slug = Str::slug($contact->id);
+                            // Get Contact slag url
+                            $fianlslug = contactSlugUrl($mainType, $slug);
+                            //Update slag url
+                            $contact->update([
+                                'slag' => $fianlslug
+                            ]);
+                        }
                         // Update Outlook sync count
                         if ($mainType == 'P') {
                             $user->increment('prospect_outlook_sync_count');
@@ -284,7 +288,7 @@ class OutlookController extends Controller
 
             // Next page token exist then redirect to next page and get contacts
             if (!empty($accessToken) && !empty($page)) {
-                $this->getOutllokContacts($accessToken, $mainType, $authId, ($page + 1));
+                $this->outllokContacts($accessToken, $mainType, $authId, ($page + 1));
             }
 
             // Update sync flag

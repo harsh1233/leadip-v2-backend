@@ -15,8 +15,9 @@ class CompanyController extends Controller
      * @param  mixed $request
      * @return void
      */
-    public function description(Request $request)
+    public function description(Request $request) // TODO: "not use this api"
     {
+        //Validation
         $this->validate($request, [
             'company_logo'  =>  'nullable|mimes:png,jpg,jpeg|max:5120', //upto 5 Mb
             'name'          =>  'required|max:64',
@@ -26,23 +27,24 @@ class CompanyController extends Controller
             'company_logo.max' => 'The company logo must not be greater than 5 MB.'
         ]);
 
-        //$user = User::findOrFail(auth()->user()->id);
         $user = auth()->user();
         if ($request->company_logo) {
             $file         = $request->company_logo;
             $directory    = 'company/logo';
+            //Upload image in s3 bucket
             $company_logo = uploadFile($file, $directory);
         } else {
             $company_logo = $user->company->profile_picture;
         }
 
+        // Update Company Details
         $user->company->update([
             'profile_picture'   =>  $company_logo,
             'name'              =>  $request->name,
             'headline'          =>  $request->headline,
             'description'       =>  $request->description,
         ]);
-        return ok(__('Description updated successfully!'), $user);
+        return ok(__('Company description updated successfully'), $user);
     }
 
     /**
@@ -51,8 +53,9 @@ class CompanyController extends Controller
      * @param  mixed $request
      * @return void
      */
-    public function contactsAndChannels(Request $request)
+    public function contactsAndChannels(Request $request) // TODO: "not use this api"
     {
+        //Validation
         $this->validate($request, [
             'email'             =>  'required|email',
             'phone'             =>  'required|min:12|numeric',
@@ -63,7 +66,7 @@ class CompanyController extends Controller
             'extra_channels'    =>  'nullable|array',
 
         ]);
-        //$user = User::findOrFail(auth()->user()->id);
+
         $user           = auth()->user();
         $extra_channels = serialize($request->input('extra_channels'));
 
@@ -90,10 +93,10 @@ class CompanyController extends Controller
      * @param  mixed $request
      * @return void
      */
-    public function companyOffice(Request $request)
+    public function companyOffice(Request $request) // TODO: "not use this api"
     {
+        //Validation
         $this->validate($request, [
-            //'user_id'                  =>  'required|exists:users,id',
             'offices'                  =>  'nullable|array',
             'offices.*.address'        =>  'required',
             'offices.*.country_code'   =>  'required|exists:countries,code',
@@ -101,13 +104,12 @@ class CompanyController extends Controller
             'offices.*.type'           =>  'required|in:B,H', //B: Branch, H: Headquarters
         ]);
 
-        //$user = User::findOrFail($request->user_id);
         $user = auth()->user();
         // delete old location
         $user->company->offices()->delete();
         //create new location
         if (isset($request['offices']) && count($request['offices']) > 0) {
-            foreach ($request['offices'] as $key => $office) {
+            foreach ($request['offices'] as $office) {
                 $user->company->offices()->create([
                     'company_id'    => $user->company->id,
                     'address'       => $office['address'],
@@ -126,10 +128,10 @@ class CompanyController extends Controller
      * @param  mixed $request
      * @return void
      */
-    public function companyLanguages(Request $request)
+    public function companyLanguages(Request $request) // TODO: "not use this api"
     {
+        //Validation
         $this->validate($request, [
-            //'user_id'       =>  'required|exists:users,id',
             'languages'     =>  'nullable|array',
         ]);
 
@@ -150,14 +152,13 @@ class CompanyController extends Controller
      * @param  mixed $request
      * @return void
      */
-    public function companyExpertises(Request $request)
+    public function companyExpertises(Request $request) // TODO: "not use this api"
     {
+        //Validation
         $this->validate($request, [
-            //'user_id'       =>  'required|exists:users,id',
             'expertises'    =>  'nullable|array',
         ]);
 
-        //$user = User::findOrFail($request->user_id);
         $user  = auth()->user();
         // create or update user details
         $company = Company::updateOrCreate([
@@ -173,13 +174,12 @@ class CompanyController extends Controller
      * @param  mixed $request
      * @return void
      */
-    public function companyServices(Request $request)
+    public function companyServices(Request $request) // TODO: "not use this api"
     {
+        //Validation
         $this->validate($request, [
-            //'user_id'     =>  'required|exists:users,id',
             'services'    =>  'nullable|array',
         ]);
-        //$user = User::findOrFail($request->user_id);
         $user = auth()->user();
         // create or update user details
         $company = Company::updateOrCreate([
@@ -196,13 +196,12 @@ class CompanyController extends Controller
      * @param  mixed $request
      * @return void
      */
-    public function companyRegions(Request $request)
+    public function companyRegions(Request $request) // TODO: "not use this api"
     {
+        //Validation
         $this->validate($request, [
-            //'user_id'       =>  'required|exists:users,id',
             'regions'       =>  'nullable|array',
         ]);
-        //$user = User::findOrFail($request->user_id);
         $user = auth()->user();        // create or update user details
         $company = Company::updateOrCreate([
             'id'           =>  $user->company_id
@@ -220,6 +219,7 @@ class CompanyController extends Controller
      */
     public function update(Request $request)
     {
+        //Validation
         $this->validate($request, [
             'company_logo'                          =>  'nullable|mimes:png,jpg,jpeg|max:5120', //upto 5 Mb
             'name'                                  =>  'required|max:64',
@@ -260,6 +260,7 @@ class CompanyController extends Controller
         if ($request->company_logo) {
             $file         = $request->company_logo;
             $directory    = 'company/logo';
+            //Image store in s3 bucket
             $company_logo = uploadFile($file, $directory);
         } else {
             $company_logo = $user->company->profile_picture;
@@ -293,11 +294,12 @@ class CompanyController extends Controller
             $regions = $user->company->regions;
         }
 
+        // Update company info
         $user->company->update([
-            'profile_picture'   =>  $company_logo,
-            'name'              =>  $request->name,
-            'headline'          =>  $request->headline,
-            'description'       =>  $request->description,
+            'profile_picture'   => $company_logo,
+            'name'              => $request->name,
+            'headline'          => $request->headline,
+            'description'       => $request->description,
             'email'             => $request->email,
             'phone'             => $request->phone,
             'linkedin_profile'  => $request->linkedin_profile,
@@ -309,16 +311,16 @@ class CompanyController extends Controller
             'expertises'        => $expertises,
             'services'          => $services,
             'regions'           => $regions,
-            'id'                =>  $user->company_id
+            'id'                => $user->company_id
         ]);
 
-        //create new location
+        // If office already exist then delete and create new office otherwise create office
         if (isset($request['offices']) && count($request['offices']) > 0) {
 
             // delete old location
             $user->company->offices()->delete();
-
-            foreach ($request['offices'] as $key => $office) {
+            //create new offices
+            foreach ($request['offices'] as $office) {
                 $user->company->offices()->create([
                     'company_id'    => $user->company->id,
                     'address'       => $office['address'],
@@ -329,11 +331,12 @@ class CompanyController extends Controller
             }
         }
 
+        // If certification already exist then delete and create new certification otherwise create certification
         if (isset($request['certifications']) && count($request['certifications']) > 0) {
-
+            // delete old certification
             $user->company->certifications()->delete();
-
-            foreach ($request['certifications'] as $key => $certification) {
+            //create new certifications
+            foreach ($request['certifications'] as $certification) {
                 $user->company->certifications()->create([
                     'company_id'            => $user->company->id,
                     'name'                  => $certification['name'] ?? '',
@@ -343,10 +346,12 @@ class CompanyController extends Controller
             }
         }
 
+        // If meets already exist then delete and create new meets otherwise create meets
         if (isset($request['meets']) && count($request['meets']) > 0) {
+            //delete old meets
             $user->company->meets()->delete();
-
-            foreach ($request['meets'] as $key => $certification) {
+            //create new meets
+            foreach ($request['meets'] as $certification) {
                 $user->company->meets()->create([
                     'company_id'            => $user->company->id,
                     'name'                  => $certification['name'] ?? '',
@@ -370,8 +375,9 @@ class CompanyController extends Controller
      * @param  mixed $request
      * @return void
      */
-    public function companyCertifications(Request $request)
+    public function companyCertifications(Request $request) // TODO: "not use this api"
     {
+        //Validation
         $this->validate($request, [
             'user_id'                               =>  'required|exists:users,id',
             'certifications'                        =>  'nullable|array',
@@ -387,7 +393,7 @@ class CompanyController extends Controller
 
         //create new location
         if (isset($request['certifications']) && count($request['certifications']) > 0) {
-            foreach ($request['certifications'] as $key => $certification) {
+            foreach ($request['certifications'] as $certification) {
                 $user->company->certifications()->create([
                     'company_id'            => $user->company->id,
                     'name'                  => $certification['name'] ?? '',
@@ -405,8 +411,9 @@ class CompanyController extends Controller
      * @param  mixed $request
      * @return void
      */
-    public function companyMeet(Request $request)
+    public function companyMeet(Request $request) // TODO: "not use this api"
     {
+        //Validation
         $this->validate($request, [
             'user_id'               =>  'required|exists:users,id',
             'meets'                 =>  'nullable|array',
@@ -421,7 +428,7 @@ class CompanyController extends Controller
         $user->company->meets()->delete();
         //create new location
         if (isset($request['meets']) && count($request['meets']) > 0) {
-            foreach ($request['meets'] as $key => $certification) {
+            foreach ($request['meets'] as $certification) {
                 $user->company->meets()->create([
                     'company_id'            => $user->company->id,
                     'name'                  => $certification['name'] ?? '',
@@ -442,12 +449,14 @@ class CompanyController extends Controller
      */
     public function companyViewProfile($id)
     {
+        // Get user using id
         $user = User::find($id);
 
         if (!$user) {
             return error(__('This user does not exist!'), [], 'validation');
         }
 
+        // Get company info using user company id
         $company = Company::with('users', 'offices.city_details', 'offices.country_details', 'certifications', 'meets.country_details')->findOrFail($user->company_id);
 
         return ok(__('View company profile successfully!'), $company);

@@ -24,6 +24,7 @@
         "laravel/sail": "^1.0.1",
         "mockery/mockery": "^1.4.4",
         "nunomaduro/collision": "^6.1",
+        "phpstan/phpstan": "^1.10",
         "phpunit/phpunit": "^9.5.10",
         "spatie/laravel-ignition": "^1.0"
     },
@@ -33,15 +34,14 @@
             "Database\\Factories\\": "database/factories/",
             "Database\\Seeders\\": "database/seeders/"
         },
-        "files": [ "app/Helpers/Functions.php" ]
+        "files": [ "app/Http/Helpers/APIResponse.php" ]
     },
     "autoload-dev": {
         "psr-4": {
             "Tests\\": "tests/"
         },
-        "files": [ 
-            "app/Http/Helpers/APIResponse.php",
-            "app/Http/Helpers/Functions.php"
+        "files": [
+            "app/Http/Helpers/APIResponse.php"
         ]
     },
     "scripts": {
